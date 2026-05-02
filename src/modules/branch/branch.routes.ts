@@ -31,5 +31,11 @@ router.delete(
   authorize("admin"),
   branchController.remove,
 );
+router.patch(
+  "/:id/activate",
+  authenticate,
+  authorize("admin"),
+  branchController.activate,
+);
 
 export default router;

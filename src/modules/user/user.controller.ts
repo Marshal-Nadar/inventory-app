@@ -5,9 +5,10 @@ export const getAll = async (
   req: Request,
   res: Response,
   next: NextFunction,
-) => {
+): Promise<void> => {
   try {
-    const data = await userService.getAllUsers();
+    const { is_super_admin, restaurant_id } = req.user!;
+    const data = await userService.getAllUsers(is_super_admin, restaurant_id);
     res.json({ success: true, data });
   } catch (err) {
     next(err);
@@ -18,10 +19,13 @@ export const getByBranch = async (
   req: Request,
   res: Response,
   next: NextFunction,
-) => {
+): Promise<void> => {
   try {
+    const { is_super_admin, restaurant_id } = req.user!;
     const data = await userService.getUsersByBranch(
       Number(req.params.branchId),
+      is_super_admin,
+      restaurant_id,
     );
     res.json({ success: true, data });
   } catch (err) {
@@ -33,13 +37,13 @@ export const getById = async (
   req: Request,
   res: Response,
   next: NextFunction,
-) => {
+): Promise<void> => {
   try {
     const data = await userService.getUserById(Number(req.params.id));
-    if (!data)
-      return res
-        .status(404)
-        .json({ success: false, message: "User not found" });
+    if (!data) {
+      res.status(404).json({ success: false, message: "User not found" });
+      return;
+    }
     res.json({ success: true, data });
   } catch (err) {
     next(err);
@@ -50,7 +54,7 @@ export const create = async (
   req: Request,
   res: Response,
   next: NextFunction,
-) => {
+): Promise<void> => {
   try {
     const { restaurant_id, branch_id, role_id, name, email, password } =
       req.body;
@@ -62,9 +66,10 @@ export const create = async (
       !email ||
       !password
     ) {
-      return res
+      res
         .status(400)
         .json({ success: false, message: "All fields are required" });
+      return;
     }
     const data = await userService.createUser(
       restaurant_id,
@@ -77,9 +82,8 @@ export const create = async (
     res.status(201).json({ success: true, data });
   } catch (err: any) {
     if (err.code === "23505") {
-      return res
-        .status(400)
-        .json({ success: false, message: "Email already exists" });
+      res.status(400).json({ success: false, message: "Email already exists" });
+      return;
     }
     next(err);
   }
@@ -89,7 +93,7 @@ export const update = async (
   req: Request,
   res: Response,
   next: NextFunction,
-) => {
+): Promise<void> => {
   try {
     const { branch_id, role_id, name, email } = req.body;
     const data = await userService.updateUser(
@@ -99,10 +103,10 @@ export const update = async (
       name,
       email,
     );
-    if (!data)
-      return res
-        .status(404)
-        .json({ success: false, message: "User not found" });
+    if (!data) {
+      res.status(404).json({ success: false, message: "User not found" });
+      return;
+    }
     res.json({ success: true, data });
   } catch (err) {
     next(err);
@@ -113,13 +117,13 @@ export const remove = async (
   req: Request,
   res: Response,
   next: NextFunction,
-) => {
+): Promise<void> => {
   try {
     const data = await userService.deleteUser(Number(req.params.id));
-    if (!data)
-      return res
-        .status(404)
-        .json({ success: false, message: "User not found" });
+    if (!data) {
+      res.status(404).json({ success: false, message: "User not found" });
+      return;
+    }
     res.json({ success: true, message: "User deactivated", data });
   } catch (err) {
     next(err);

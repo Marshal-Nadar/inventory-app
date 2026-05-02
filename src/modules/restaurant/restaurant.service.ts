@@ -1,8 +1,10 @@
 import pool from "../../config/db";
 
-export const getAllRestaurants = async () => {
+export const getAllRestaurants = async (isSuperAdmin: boolean) => {
   const result = await pool.query(
-    `SELECT * FROM restaurants WHERE is_active = true ORDER BY created_at DESC`,
+    `SELECT * FROM restaurants
+     ${!isSuperAdmin ? "WHERE is_active = true" : ""}
+     ORDER BY created_at DESC`,
   );
   return result.rows;
 };
@@ -44,6 +46,14 @@ export const updateRestaurant = async (
 export const deleteRestaurant = async (id: number) => {
   const result = await pool.query(
     `UPDATE restaurants SET is_active = false WHERE id = $1 RETURNING *`,
+    [id],
+  );
+  return result.rows[0];
+};
+
+export const activateRestaurant = async (id: number) => {
+  const result = await pool.query(
+    `UPDATE restaurants SET is_active = true WHERE id = $1 RETURNING *`,
     [id],
   );
   return result.rows[0];

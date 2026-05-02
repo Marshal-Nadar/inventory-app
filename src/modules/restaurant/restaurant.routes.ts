@@ -25,5 +25,11 @@ router.delete(
   authorize("admin"),
   restaurantController.remove,
 );
+router.patch(
+  "/:id/activate",
+  authenticate,
+  authorize("admin"),
+  restaurantController.activate,
+);
 
 export default router;

@@ -1,19 +1,33 @@
 import pool from "../../config/db";
 
-export const getAllBranches = async () => {
-  const result = await pool.query(
-    `SELECT b.*, r.name AS restaurant_name 
-     FROM branches b
-     JOIN restaurants r ON b.restaurant_id = r.id
-     WHERE b.is_active = true 
-     ORDER BY b.created_at DESC`,
-  );
-  return result.rows;
+export const getAllBranches = async (
+  isSuperAdmin: boolean,
+  restaurantId: number,
+) => {
+  if (isSuperAdmin) {
+    const result = await pool.query(
+      `SELECT b.*, r.name AS restaurant_name
+       FROM branches b
+       JOIN restaurants r ON b.restaurant_id = r.id
+       ORDER BY b.created_at DESC`,
+    );
+    return result.rows;
+  } else {
+    const result = await pool.query(
+      `SELECT b.*, r.name AS restaurant_name
+       FROM branches b
+       JOIN restaurants r ON b.restaurant_id = r.id
+       WHERE b.restaurant_id = $1
+       ORDER BY b.created_at DESC`,
+      [restaurantId],
+    );
+    return result.rows;
+  }
 };
 
 export const getBranchesByRestaurant = async (restaurantId: number) => {
   const result = await pool.query(
-    `SELECT b.*, r.name AS restaurant_name 
+    `SELECT b.*, r.name AS restaurant_name
      FROM branches b
      JOIN restaurants r ON b.restaurant_id = r.id
      WHERE b.restaurant_id = $1 AND b.is_active = true
@@ -25,7 +39,7 @@ export const getBranchesByRestaurant = async (restaurantId: number) => {
 
 export const getBranchById = async (id: number) => {
   const result = await pool.query(
-    `SELECT b.*, r.name AS restaurant_name 
+    `SELECT b.*, r.name AS restaurant_name
      FROM branches b
      JOIN restaurants r ON b.restaurant_id = r.id
      WHERE b.id = $1`,
@@ -64,7 +78,17 @@ export const updateBranch = async (
 
 export const deleteBranch = async (id: number) => {
   const result = await pool.query(
-    `UPDATE branches SET is_active = false WHERE id = $1 RETURNING *`,
+    `UPDATE branches SET is_active = false
+     WHERE id = $1 RETURNING *`,
+    [id],
+  );
+  return result.rows[0];
+};
+
+export const activateBranch = async (id: number) => {
+  const result = await pool.query(
+    `UPDATE branches SET is_active = true
+     WHERE id = $1 RETURNING *`,
     [id],
   );
   return result.rows[0];

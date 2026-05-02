@@ -5,9 +5,10 @@ export const getAll = async (
   req: Request,
   res: Response,
   next: NextFunction,
-) => {
+): Promise<void> => {
   try {
-    const data = await restaurantService.getAllRestaurants();
+    const { is_super_admin } = req.user!;
+    const data = await restaurantService.getAllRestaurants(is_super_admin);
     res.json({ success: true, data });
   } catch (err) {
     next(err);
@@ -93,6 +94,25 @@ export const remove = async (
         .status(404)
         .json({ success: false, message: "Restaurant not found" });
     res.json({ success: true, message: "Restaurant deactivated", data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const activate = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const data = await restaurantService.activateRestaurant(
+      Number(req.params.id),
+    );
+    if (!data) {
+      res.status(404).json({ success: false, message: "Restaurant not found" });
+      return;
+    }
+    res.json({ success: true, message: "Restaurant activated", data });
   } catch (err) {
     next(err);
   }

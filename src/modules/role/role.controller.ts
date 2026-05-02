@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import * as branchService from "./branch.service";
+import * as roleService from "./role.service";
 
 export const getAll = async (
   req: Request,
@@ -8,10 +8,7 @@ export const getAll = async (
 ): Promise<void> => {
   try {
     const { is_super_admin, restaurant_id } = req.user!;
-    const data = await branchService.getAllBranches(
-      is_super_admin,
-      restaurant_id,
-    );
+    const data = await roleService.getAllRoles(is_super_admin, restaurant_id);
     res.json({ success: true, data });
   } catch (err) {
     next(err);
@@ -24,7 +21,7 @@ export const getByRestaurant = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const data = await branchService.getBranchesByRestaurant(
+    const data = await roleService.getRolesByRestaurant(
       Number(req.params.restaurantId),
     );
     res.json({ success: true, data });
@@ -39,9 +36,9 @@ export const getById = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const data = await branchService.getBranchById(Number(req.params.id));
+    const data = await roleService.getRoleById(Number(req.params.id));
     if (!data) {
-      res.status(404).json({ success: false, message: "Branch not found" });
+      res.status(404).json({ success: false, message: "Role not found" });
       return;
     }
     res.json({ success: true, data });
@@ -56,22 +53,24 @@ export const create = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const { restaurant_id, name, address, phone } = req.body;
+    const { restaurant_id, name, description } = req.body;
     if (!restaurant_id || !name) {
       res.status(400).json({
         success: false,
-        message: "Restaurant ID and name are required",
+        message: "restaurant_id and name are required",
       });
       return;
     }
-    const data = await branchService.createBranch(
-      restaurant_id,
-      name,
-      address,
-      phone,
-    );
+    const data = await roleService.createRole(restaurant_id, name, description);
     res.status(201).json({ success: true, data });
-  } catch (err) {
+  } catch (err: any) {
+    if (err.code === "23505") {
+      res.status(400).json({
+        success: false,
+        message: "Role name already exists for this restaurant",
+      });
+      return;
+    }
     next(err);
   }
 };
@@ -82,15 +81,18 @@ export const update = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const { name, address, phone } = req.body;
-    const data = await branchService.updateBranch(
+    const { name, description } = req.body;
+    if (!name) {
+      res.status(400).json({ success: false, message: "Name is required" });
+      return;
+    }
+    const data = await roleService.updateRole(
       Number(req.params.id),
       name,
-      address,
-      phone,
+      description,
     );
     if (!data) {
-      res.status(404).json({ success: false, message: "Branch not found" });
+      res.status(404).json({ success: false, message: "Role not found" });
       return;
     }
     res.json({ success: true, data });
@@ -105,30 +107,17 @@ export const remove = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const data = await branchService.deleteBranch(Number(req.params.id));
+    const data = await roleService.deleteRole(Number(req.params.id));
     if (!data) {
-      res.status(404).json({ success: false, message: "Branch not found" });
+      res.status(404).json({ success: false, message: "Role not found" });
       return;
     }
-    res.json({ success: true, message: "Branch deactivated", data });
-  } catch (err) {
-    next(err);
-  }
-};
-
-export const activate = async (
-  req: Request,
-  res: Response,
-  next: NextFunction,
-): Promise<void> => {
-  try {
-    const data = await branchService.activateBranch(Number(req.params.id));
-    if (!data) {
-      res.status(404).json({ success: false, message: "Branch not found" });
+    res.json({ success: true, message: "Role deleted", data });
+  } catch (err: any) {
+    if (err.status) {
+      res.status(err.status).json({ success: false, message: err.message });
       return;
     }
-    res.json({ success: true, message: "Branch activated", data });
-  } catch (err) {
     next(err);
   }
 };

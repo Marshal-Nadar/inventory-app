@@ -1,23 +1,54 @@
 import pool from "../../config/db";
 import bcrypt from "bcryptjs";
 
-export const getAllUsers = async () => {
-  const result = await pool.query(
-    `SELECT u.id, u.name, u.email, u.is_active, u.created_at,
-            r.name AS role_name,
-            b.name AS branch_name,
-            res.name AS restaurant_name
-     FROM users u
-     JOIN roles r ON u.role_id = r.id
-     JOIN branches b ON u.branch_id = b.id
-     JOIN restaurants res ON u.restaurant_id = res.id
-     WHERE u.is_active = true
-     ORDER BY u.created_at DESC`,
-  );
-  return result.rows;
+export const getAllUsers = async (
+  isSuperAdmin: boolean,
+  restaurantId: number,
+) => {
+  if (isSuperAdmin) {
+    const result = await pool.query(
+      `SELECT u.id, u.name, u.email, u.is_active, u.created_at,
+              r.name AS role_name,
+              b.name AS branch_name,
+              res.name AS restaurant_name,
+              u.role_id,
+              u.branch_id,
+              u.restaurant_id
+       FROM users u
+       JOIN roles r ON u.role_id = r.id
+       JOIN branches b ON u.branch_id = b.id
+       JOIN restaurants res ON u.restaurant_id = res.id
+       WHERE u.is_active = true
+       ORDER BY u.created_at DESC`,
+    );
+    return result.rows;
+  } else {
+    const result = await pool.query(
+      `SELECT u.id, u.name, u.email, u.is_active, u.created_at,
+              r.name AS role_name,
+              b.name AS branch_name,
+              res.name AS restaurant_name,
+              u.role_id,
+              u.branch_id,
+              u.restaurant_id
+       FROM users u
+       JOIN roles r ON u.role_id = r.id
+       JOIN branches b ON u.branch_id = b.id
+       JOIN restaurants res ON u.restaurant_id = res.id
+       WHERE u.is_active = true
+       AND u.restaurant_id = $1
+       ORDER BY u.created_at DESC`,
+      [restaurantId],
+    );
+    return result.rows;
+  }
 };
 
-export const getUsersByBranch = async (branchId: number) => {
+export const getUsersByBranch = async (
+  branchId: number,
+  isSuperAdmin: boolean,
+  restaurantId: number,
+) => {
   const result = await pool.query(
     `SELECT u.id, u.name, u.email, u.is_active, u.created_at,
             r.name AS role_name,
@@ -26,8 +57,9 @@ export const getUsersByBranch = async (branchId: number) => {
      JOIN roles r ON u.role_id = r.id
      JOIN branches b ON u.branch_id = b.id
      WHERE u.branch_id = $1 AND u.is_active = true
+     ${!isSuperAdmin ? "AND u.restaurant_id = $2" : ""}
      ORDER BY u.created_at DESC`,
-    [branchId],
+    !isSuperAdmin ? [branchId, restaurantId] : [branchId],
   );
   return result.rows;
 };
@@ -37,7 +69,10 @@ export const getUserById = async (id: number) => {
     `SELECT u.id, u.name, u.email, u.is_active, u.created_at,
             r.name AS role_name,
             b.name AS branch_name,
-            res.name AS restaurant_name
+            res.name AS restaurant_name,
+            u.role_id,
+            u.branch_id,
+            u.restaurant_id
      FROM users u
      JOIN roles r ON u.role_id = r.id
      JOIN branches b ON u.branch_id = b.id
@@ -59,8 +94,8 @@ export const createUser = async (
   const passwordHash = await bcrypt.hash(password, 10);
   const result = await pool.query(
     `INSERT INTO users (restaurant_id, branch_id, role_id, name, email, password_hash)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING 
-     id, name, email, is_active, created_at`,
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, name, email, is_active, created_at`,
     [restaurantId, branchId, roleId, name, email, passwordHash],
   );
   return result.rows[0];
@@ -75,7 +110,8 @@ export const updateUser = async (
 ) => {
   const result = await pool.query(
     `UPDATE users SET branch_id = $1, role_id = $2, name = $3, email = $4
-     WHERE id = $5 RETURNING id, name, email, is_active, created_at`,
+     WHERE id = $5
+     RETURNING id, name, email, is_active, created_at`,
     [branchId, roleId, name, email, id],
   );
   return result.rows[0];
@@ -83,7 +119,7 @@ export const updateUser = async (
 
 export const deleteUser = async (id: number) => {
   const result = await pool.query(
-    `UPDATE users SET is_active = false WHERE id = $1 
+    `UPDATE users SET is_active = false WHERE id = $1
      RETURNING id, name, email, is_active`,
     [id],
   );

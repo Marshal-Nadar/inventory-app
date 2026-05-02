@@ -7,6 +7,7 @@ export interface AuthUser {
   role: string;
   branch_id: number;
   restaurant_id: number;
+  is_super_admin: boolean;
   impersonated?: boolean;
   impersonated_by?: number;
 }

@@ -1,66 +1,82 @@
-# Restaurant Management API
+# Restaurant Management — Backend API
 
-A modular, scalable REST API for managing multi-branch restaurant operations — built with Node.js, Express, TypeScript, and PostgreSQL.
+A modular, scalable REST API for managing multi-branch, multi-restaurant operations — built with Node.js, Express, TypeScript, and PostgreSQL.
 
 ---
 
 ## Table of Contents
 
 1. [Project Overview](#project-overview)
-2. [Project Structure](#project-structure)
-3. [Installation Steps](#installation-steps)
-4. [Environment Variables](#environment-variables)
-5. [Database Setup](#database-setup)
-6. [API Endpoints](#api-endpoints)
-7. [Authentication](#authentication)
-8. [Error Handling](#error-handling)
-9. [Best Practices Used](#best-practices-used)
-10. [Future Improvements](#future-improvements)
+2. [Tech Stack](#tech-stack)
+3. [Project Structure](#project-structure)
+4. [Installation Steps](#installation-steps)
+5. [Environment Variables](#environment-variables)
+6. [Database Setup](#database-setup)
+7. [API Endpoints](#api-endpoints)
+8. [Authentication & Authorization](#authentication--authorization)
+9. [Super Admin vs Restaurant Admin](#super-admin-vs-restaurant-admin)
+10. [Error Handling](#error-handling)
+11. [Best Practices Used](#best-practices-used)
+12. [Future Improvements](#future-improvements)
 
 ---
 
 ## Project Overview
 
-The Restaurant Management API is a backend system designed to handle the core operations of a multi-restaurant, multi-branch food business. It supports organization setup, user management, role-based access, and authentication — with a clean, modular architecture that makes it easy to extend.
+The Restaurant Management API handles the full backend for a SaaS-style restaurant management platform. It supports multiple restaurants, each with multiple branches, users, and roles — all isolated per restaurant. A super admin sits above all restaurants and manages the platform.
 
 ### What it does
 
-- Manage multiple restaurants and their branches
-- Create and manage users assigned to specific branches and roles
-- Authenticate users securely using bcrypt password hashing and JWT
-- Allow admin to impersonate other users for support operations
-- Provide a structured, RESTful API for frontend consumption
+- Multi-restaurant, multi-branch architecture
+- JWT-based authentication with bcrypt password hashing
+- Role-based access control (RBAC) — admin, manager, cashier, kitchen
+- Super admin login — above all restaurants, sees everything
+- Restaurant-scoped data — users only see their own restaurant's data
+- User impersonation — admin can log in as any user for support
+- Full CRUD for restaurants, branches, users, and roles
+- Default role protection — system roles cannot be deleted
+- Soft deletes — records deactivated, never hard deleted
+- Activate/deactivate for restaurants and branches
 
-### Tech Stack
+---
 
-| Layer            | Technology            |
-| ---------------- | --------------------- |
-| Runtime          | Node.js               |
-| Framework        | Express.js v4         |
-| Language         | TypeScript            |
-| Database         | PostgreSQL            |
-| ORM / Query      | pg (node-postgres)    |
-| Authentication   | JSON Web Tokens (JWT) |
-| Password Hashing | bcryptjs              |
-| Validation       | Zod                   |
-| Dev Tools        | ts-node, nodemon      |
+## Tech Stack
+
+| Layer            | Technology                           |
+| ---------------- | ------------------------------------ |
+| Runtime          | Node.js                              |
+| Framework        | Express.js v4                        |
+| Language         | TypeScript                           |
+| Database         | PostgreSQL v18                       |
+| DB Client        | pg (node-postgres) — raw SQL, no ORM |
+| Authentication   | JSON Web Tokens (JWT)                |
+| Password Hashing | bcryptjs                             |
+| Validation       | Zod (planned)                        |
+| Dev Tools        | ts-node, nodemon                     |
 
 ---
 
 ## Project Structure
 
 ```
-restaurant-api/
+inventory-app/
 ├── src/
 │   ├── config/
-│   │   └── db.ts                  # PostgreSQL connection pool
+│   │   └── db.ts                      # PostgreSQL connection pool
+│   ├── db/
+│   │   ├── migrations/
+│   │   │   └── 001_init_org_auth.sql  # Initial schema
+│   │   └── seeds/
+│   │       └── 001_roles.sql          # Default roles seed
 │   ├── middlewares/
-│   │   └── errorHandler.ts        # Global error handler
+│   │   ├── authenticate.ts            # JWT token validation
+│   │   ├── authorize.ts               # Role-based access control
+│   │   └── errorHandler.ts            # Global error handler
 │   ├── modules/
 │   │   ├── auth/
-│   │   │   ├── auth.controller.ts # Login and impersonate handlers
-│   │   │   ├── auth.routes.ts     # Auth route definitions
-│   │   │   └── auth.service.ts    # Auth business logic
+│   │   │   ├── auth.controller.ts
+│   │   │   ├── auth.routes.ts
+│   │   │   └── auth.service.ts
 │   │   ├── branch/
 │   │   │   ├── branch.controller.ts
 │   │   │   ├── branch.routes.ts
@@ -69,30 +85,22 @@ restaurant-api/
 │   │   │   ├── restaurant.controller.ts
 │   │   │   ├── restaurant.routes.ts
 │   │   │   └── restaurant.service.ts
+│   │   ├── role/
+│   │   │   ├── role.controller.ts
+│   │   │   ├── role.routes.ts
+│   │   │   └── role.service.ts
 │   │   └── user/
 │   │       ├── user.controller.ts
 │   │       ├── user.routes.ts
 │   │       └── user.service.ts
 │   ├── routes/
-│   │   └── index.ts               # Root router — mounts all modules
-│   └── app.ts                     # Express app entry point
-├── src/db/
-│   ├── migrations/
-│   │   └── 001_init_org_auth.sql  # Initial schema — all tables
-│   └── seeds/
-│       └── 001_roles.sql          # Default roles seed data
-├── .env                           # Environment variables (not committed)
-├── nodemon.json                   # Nodemon watch config
-├── tsconfig.json                  # TypeScript compiler config
+│   │   └── index.ts                   # Root router
+│   └── app.ts                         # Express entry point
+├── .env
+├── nodemon.json
+├── tsconfig.json
 └── package.json
 ```
-
-### Folder Responsibilities
-
-- **config/** — database connection and environment setup
-- **modules/** — each feature (restaurant, branch, user, auth) is self-contained with its own routes, controller, and service
-- **middlewares/** — shared middleware like global error handling
-- **routes/index.ts** — single entry point that registers all module routes under `/api`
 
 ---
 
@@ -100,80 +108,91 @@ restaurant-api/
 
 ### Prerequisites
 
-- Node.js v18 or higher
-- PostgreSQL v14 or higher
+- Node.js v18+
+- PostgreSQL v14+
 - npm
 
-### 1. Clone the repository
+### 1. Clone and install
 
 ```bash
-git clone https://github.com/your-username/restaurant-api.git
-cd restaurant-api
-```
-
-### 2. Install dependencies
-
-```bash
+git clone https://github.com/your-username/inventory-app.git
+cd inventory-app
 npm install
 ```
 
-### 3. Set up environment variables
+### 2. Set up environment variables
 
 ```bash
 cp .env.example .env
 # edit .env with your values
 ```
 
-### 4. Set up the database
+### 3. Create database
 
 ```bash
-# create the database
-psql -U postgres -c "CREATE DATABASE restaurant_db;"
-
-# run the migration
-psql -U postgres -h 127.0.0.1 -d restaurant_db -f src/db/migrations/001_init_org_auth.sql
-
-# seed default roles
-psql -U postgres -h 127.0.0.1 -d restaurant_db -f src/db/seeds/001_roles.sql
+psql -U postgres
+CREATE DATABASE inventory;
+\q
 ```
 
-### 5. Run the project
+### 4. Run migrations
 
 ```bash
-# development
+psql -U postgres -h 127.0.0.1 -d inventory -f src/db/migrations/001_init_org_auth.sql
+```
+
+### 5. Seed default roles
+
+```bash
+psql -U postgres -h 127.0.0.1 -d inventory -f src/db/seeds/001_roles.sql
+```
+
+### 6. Create super admin
+
+```bash
+psql -U postgres -h 127.0.0.1 -d inventory
+```
+
+```sql
+INSERT INTO users (name, email, password_hash, is_active, is_super_admin)
+VALUES (
+  'Super Admin',
+  'superadmin@system.com',
+  '<bcrypt_hash_of_your_password>',
+  true,
+  true
+);
+```
+
+Generate hash:
+
+```bash
+node -e "const bcrypt = require('bcryptjs'); bcrypt.hash('YourPassword', 10).then(h => console.log(h))"
+```
+
+### 7. Run the server
+
+```bash
 npm run dev
-
-# production build
-npm run build
-npm start
 ```
 
-Server runs on `http://localhost:3001` by default.
+Server runs on `http://localhost:3001`.
 
 ---
 
 ## Environment Variables
 
-Create a `.env` file in the root of the project:
-
 ```env
-# PostgreSQL connection string
-DATABASE_URL=postgresql://postgres:yourpassword@localhost:5432/restaurant_db
-
-# Server port
+DATABASE_URL=postgresql://postgres:yourpassword@localhost:5432/inventory
 PORT=3001
-
-# JWT secret for signing access tokens
 JWT_ACCESS_SECRET=your_super_secret_key_here
 ```
 
-| Variable            | Description                                   |
-| ------------------- | --------------------------------------------- |
-| `DATABASE_URL`      | Full PostgreSQL connection string             |
-| `PORT`              | Port the Express server listens on            |
-| `JWT_ACCESS_SECRET` | Secret key used to sign and verify JWT tokens |
-
-> **Note:** Never commit your `.env` file to Git. Add it to `.gitignore`.
+| Variable            | Description                   |
+| ------------------- | ----------------------------- |
+| `DATABASE_URL`      | PostgreSQL connection string  |
+| `PORT`              | Express server port           |
+| `JWT_ACCESS_SECRET` | Secret for signing JWT tokens |
 
 ---
 
@@ -181,49 +200,58 @@ JWT_ACCESS_SECRET=your_super_secret_key_here
 
 ### Tables
 
-The database consists of 4 core tables:
-
 ```
-restaurants   — top-level tenant (each restaurant is isolated)
-branches      — branches belonging to a restaurant
-roles         — roles defined per restaurant (admin, manager, cashier, kitchen)
-users         — users assigned to a branch with a role
+restaurants      — top-level tenant
+branches         — branches per restaurant
+roles            — roles per restaurant (with is_default flag)
+users            — users with restaurant + branch + role assignment
+refresh_tokens   — JWT refresh token storage (planned)
 ```
 
-### Schema Overview
+### Schema
 
 ```sql
 restaurants
-  id, name, slug, timezone, is_active, created_at, updated_at
+  id SERIAL PK, name, slug UNIQUE, timezone, is_active, created_at, updated_at
 
 branches
-  id, restaurant_id, name, address, phone, is_active, created_at, updated_at
+  id SERIAL PK, restaurant_id FK, name, address, phone, is_active, created_at, updated_at
 
 roles
-  id, restaurant_id, name, description, created_at
+  id SERIAL PK, restaurant_id FK, name, description, is_default, created_at
+  UNIQUE(restaurant_id, name)
 
 users
-  id, restaurant_id, branch_id, role_id, name, email, password_hash, is_active, created_at, updated_at
+  id SERIAL PK, restaurant_id FK (nullable), branch_id FK (nullable),
+  role_id FK (nullable), name, email UNIQUE, password_hash,
+  is_active, is_super_admin, created_at, updated_at
+
+refresh_tokens
+  id SERIAL PK, user_id FK, token UNIQUE, expires_at, created_at
 ```
 
-### Default Roles (seeded)
+### Key design decisions
 
-| Role      | Description                  |
-| --------- | ---------------------------- |
-| `admin`   | Full access to everything    |
-| `manager` | Manage branch operations     |
-| `cashier` | Handle orders and payments   |
-| `kitchen` | View and update order status |
+**Serial PKs** — simple integer IDs. Easy to query manually, easy to debug.
 
-### Connection
+**Nullable restaurant/branch/role on users** — super admin has no restaurant affiliation. These columns are NULL for super admin accounts.
 
-The database connection is managed via a `pg.Pool` in `src/config/db.ts`. The pool reuses connections efficiently and logs errors to the console.
+**`is_super_admin` flag** — single boolean on users table. Super admin bypasses all role checks and sees all data across all restaurants.
 
-```typescript
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
-```
+**`is_default` on roles** — marks system-seeded roles. Default roles cannot be deleted. Custom roles created by restaurant admins can be freely deleted (unless users are assigned).
+
+**Soft deletes** — `is_active = false` instead of DELETE. Preserves data integrity and referential consistency.
+
+**Append-only pattern** — designed for future inventory ledger and audit logs.
+
+### Default roles (seeded)
+
+| Role      | Description            | is_default |
+| --------- | ---------------------- | ---------- |
+| `admin`   | Full restaurant access | true       |
+| `manager` | Branch operations      | true       |
+| `cashier` | Orders and payments    | true       |
+| `kitchen` | View and update orders | true       |
 
 ---
 
@@ -231,86 +259,20 @@ const pool = new Pool({
 
 Base URL: `http://localhost:3001/api`
 
-### Health Check
+### Health
 
-| Method | Route     | Description                |
-| ------ | --------- | -------------------------- |
-| GET    | `/health` | Check if server is running |
-
-### Restaurants
-
-| Method | Route                  | Description                |
-| ------ | ---------------------- | -------------------------- |
-| GET    | `/api/restaurants`     | Get all active restaurants |
-| GET    | `/api/restaurants/:id` | Get a restaurant by ID     |
-| POST   | `/api/restaurants`     | Create a new restaurant    |
-| PUT    | `/api/restaurants/:id` | Update a restaurant        |
-| DELETE | `/api/restaurants/:id` | Soft delete a restaurant   |
-
-**POST /api/restaurants — request body:**
-
-```json
-{
-  "name": "Max Restaurant",
-  "slug": "max-restaurant",
-  "timezone": "Asia/Kolkata"
-}
-```
-
-### Branches
-
-| Method | Route                                    | Description                |
-| ------ | ---------------------------------------- | -------------------------- |
-| GET    | `/api/branches`                          | Get all active branches    |
-| GET    | `/api/branches/:id`                      | Get a branch by ID         |
-| GET    | `/api/branches/restaurant/:restaurantId` | Get branches by restaurant |
-| POST   | `/api/branches`                          | Create a new branch        |
-| PUT    | `/api/branches/:id`                      | Update a branch            |
-| DELETE | `/api/branches/:id`                      | Soft delete a branch       |
-
-**POST /api/branches — request body:**
-
-```json
-{
-  "restaurant_id": 1,
-  "name": "Andheri Branch",
-  "address": "Shop 4, Andheri West, Mumbai",
-  "phone": "9876543210"
-}
-```
-
-### Users
-
-| Method | Route                         | Description          |
-| ------ | ----------------------------- | -------------------- |
-| GET    | `/api/users`                  | Get all active users |
-| GET    | `/api/users/:id`              | Get a user by ID     |
-| GET    | `/api/users/branch/:branchId` | Get users by branch  |
-| POST   | `/api/users`                  | Create a new user    |
-| PUT    | `/api/users/:id`              | Update a user        |
-| DELETE | `/api/users/:id`              | Soft delete a user   |
-
-**POST /api/users — request body:**
-
-```json
-{
-  "restaurant_id": 1,
-  "branch_id": 1,
-  "role_id": 1,
-  "name": "Tamil Selvan",
-  "email": "tamil@max.com",
-  "password": "Password@123"
-}
-```
+| Method | Route     | Auth | Description         |
+| ------ | --------- | ---- | ------------------- |
+| GET    | `/health` | None | Server health check |
 
 ### Auth
 
-| Method | Route                           | Description                   |
-| ------ | ------------------------------- | ----------------------------- |
-| POST   | `/api/auth/login`               | Login with email and password |
-| POST   | `/api/auth/impersonate/:userId` | Admin logs in as another user |
+| Method | Route                           | Auth  | Description                     |
+| ------ | ------------------------------- | ----- | ------------------------------- |
+| POST   | `/api/auth/login`               | None  | Login with email + password     |
+| POST   | `/api/auth/impersonate/:userId` | Admin | Generate token for another user |
 
-**POST /api/auth/login — request body:**
+**Login request:**
 
 ```json
 {
@@ -319,66 +281,162 @@ Base URL: `http://localhost:3001/api`
 }
 ```
 
-**POST /api/auth/impersonate/:userId — request body:**
+**Login response:**
 
 ```json
 {
-  "requesting_user_id": 1
+  "success": true,
+  "data": {
+    "token": "eyJ...",
+    "user": {
+      "id": 1,
+      "name": "Tamil Selvan",
+      "email": "tamil@max.com",
+      "role": "admin",
+      "branch": "Andheri Branch",
+      "branch_id": 1,
+      "restaurant_id": 1,
+      "is_super_admin": false
+    }
+  }
 }
 ```
 
+### Restaurants
+
+| Method | Route                           | Auth  | Description           |
+| ------ | ------------------------------- | ----- | --------------------- |
+| GET    | `/api/restaurants`              | Admin | Get all restaurants   |
+| GET    | `/api/restaurants/:id`          | Admin | Get restaurant by ID  |
+| POST   | `/api/restaurants`              | Admin | Create restaurant     |
+| PUT    | `/api/restaurants/:id`          | Admin | Update restaurant     |
+| DELETE | `/api/restaurants/:id`          | Admin | Deactivate restaurant |
+| PATCH  | `/api/restaurants/:id/activate` | Admin | Activate restaurant   |
+
+### Branches
+
+| Method | Route                          | Auth           | Description                         |
+| ------ | ------------------------------ | -------------- | ----------------------------------- |
+| GET    | `/api/branches`                | Admin, Manager | Get branches (scoped by restaurant) |
+| GET    | `/api/branches/:id`            | Admin, Manager | Get branch by ID                    |
+| GET    | `/api/branches/restaurant/:id` | Admin, Manager | Get branches by restaurant          |
+| POST   | `/api/branches`                | Admin          | Create branch                       |
+| PUT    | `/api/branches/:id`            | Admin          | Update branch                       |
+| DELETE | `/api/branches/:id`            | Admin          | Deactivate branch                   |
+| PATCH  | `/api/branches/:id/activate`   | Admin          | Activate branch                     |
+
+### Users
+
+| Method | Route                   | Auth           | Description                      |
+| ------ | ----------------------- | -------------- | -------------------------------- |
+| GET    | `/api/users`            | Admin, Manager | Get users (scoped by restaurant) |
+| GET    | `/api/users/:id`        | Admin, Manager | Get user by ID                   |
+| GET    | `/api/users/branch/:id` | Admin, Manager | Get users by branch              |
+| POST   | `/api/users`            | Admin, Manager | Create user                      |
+| PUT    | `/api/users/:id`        | Admin, Manager | Update user                      |
+| DELETE | `/api/users/:id`        | Admin          | Deactivate user                  |
+
+### Roles
+
+| Method | Route                       | Auth           | Description                      |
+| ------ | --------------------------- | -------------- | -------------------------------- |
+| GET    | `/api/roles`                | Admin, Manager | Get roles (scoped by restaurant) |
+| GET    | `/api/roles/:id`            | Admin, Manager | Get role by ID                   |
+| GET    | `/api/roles/restaurant/:id` | Admin, Manager | Get roles by restaurant          |
+| POST   | `/api/roles`                | Admin          | Create role                      |
+| PUT    | `/api/roles/:id`            | Admin          | Update role                      |
+| DELETE | `/api/roles/:id`            | Admin          | Delete role                      |
+
 ---
 
-## Authentication
+## Authentication & Authorization
 
 ### Password Hashing
 
-Passwords are never stored as plain text. When a user is created, the password is hashed using **bcryptjs** with a salt round of 10:
+Passwords hashed with bcryptjs, salt rounds 10. Never stored or returned as plain text.
 
 ```typescript
 const passwordHash = await bcrypt.hash(password, 10);
+const isMatch = await bcrypt.compare(plainPassword, passwordHash);
 ```
 
-Bcrypt is a one-way hashing algorithm — it cannot be reversed or decrypted. This is intentional and is the industry standard for password storage.
+### JWT Token
 
-### Login Flow
+Signed with `JWT_ACCESS_SECRET`. Expires in 1 day. Contains:
 
-1. User sends `email` and `password` to `POST /api/auth/login`
-2. API looks up the user by email
-3. bcrypt compares the submitted password against the stored hash
-4. If matched, a JWT access token is generated and returned
-5. The token contains the user's `id`, `email`, `role`, `branch_id`, and `restaurant_id`
-6. The token expires in `1 day`
+```json
+{
+  "id": 1,
+  "email": "tamil@max.com",
+  "role": "admin",
+  "branch_id": 1,
+  "restaurant_id": 1,
+  "is_super_admin": false
+}
+```
+
+### Authenticate Middleware
+
+Validates Bearer token on every protected route. Attaches decoded user to `req.user`.
+
+```
+Authorization: Bearer <token>
+```
+
+Returns `401` if token missing or invalid.
+
+### Authorize Middleware
+
+Checks `req.user.role` against allowed roles. Super admin bypasses all role checks automatically.
 
 ```typescript
-const token = jwt.sign(
-  { id, email, role, branch_id, restaurant_id },
-  process.env.JWT_ACCESS_SECRET,
-  { expiresIn: "1d" },
-);
+router.post("/", authenticate, authorize("admin"), controller.create);
+router.get("/", authenticate, authorize("admin", "manager"), controller.getAll);
 ```
+
+Returns `403` if role not permitted.
 
 ### Impersonation
 
-Admin can generate a token for any other user without knowing their password. This is used for support operations. The token includes `impersonated: true` and `impersonated_by: adminId` for audit purposes. Only users with the `admin` role can use this feature.
+Admin generates a token for any user without their password. Token includes `impersonated: true` and `impersonated_by: adminId`. Valid for 2 hours. Only `admin` role or super admin can impersonate.
+
+---
+
+## Super Admin vs Restaurant Admin
+
+|                        | Super Admin | Restaurant Admin                         |
+| ---------------------- | ----------- | ---------------------------------------- |
+| `restaurant_id`        | NULL        | Set to their restaurant                  |
+| `branch_id`            | NULL        | Set to their branch                      |
+| `role_id`              | NULL        | Set to their role                        |
+| `is_super_admin`       | true        | false                                    |
+| Sees restaurants       | All         | Own only                                 |
+| Sees branches          | All         | Own restaurant only                      |
+| Sees users             | All         | Own restaurant only (excl. super admins) |
+| Sees roles             | All         | Own restaurant only                      |
+| Can create restaurants | Yes         | No                                       |
+
+### Data scoping
+
+All list endpoints check `is_super_admin` from the JWT token:
+
+```typescript
+if (isSuperAdmin) {
+  // return all records
+} else {
+  // filter by restaurant_id from token
+}
+```
+
+Super admins are hidden from non-super-admin user lists via `AND u.is_super_admin = false`.
 
 ---
 
 ## Error Handling
 
-All errors flow through a centralized global error handler in `src/middlewares/errorHandler.ts`:
-
-```typescript
-export const errorHandler = (err, req, res, next) => {
-  const status = err.status || 500;
-  const message = err.message || "Internal server error";
-  res.status(status).json({ success: false, message });
-};
-```
+All errors flow through `src/middlewares/errorHandler.ts`.
 
 ### Error response format
-
-All error responses follow this consistent structure:
 
 ```json
 {
@@ -387,110 +445,103 @@ All error responses follow this consistent structure:
 }
 ```
 
-### Common error codes
+### HTTP status codes
 
-| Code | Meaning                                 |
-| ---- | --------------------------------------- |
-| 400  | Bad request — missing or invalid fields |
-| 401  | Unauthorized — wrong credentials        |
-| 403  | Forbidden — insufficient permissions    |
-| 404  | Not found — resource does not exist     |
-| 500  | Internal server error                   |
+| Code | Meaning                                                           |
+| ---- | ----------------------------------------------------------------- |
+| 400  | Bad request — missing fields, validation, business rule violation |
+| 401  | Unauthorized — missing or invalid token                           |
+| 403  | Forbidden — insufficient role                                     |
+| 404  | Not found                                                         |
+| 500  | Internal server error                                             |
 
-### Duplicate email handling
+### Business rule errors
 
-PostgreSQL unique constraint violations (error code `23505`) are caught in the user controller and returned as a clean 400 response:
-
-```json
-{
-  "success": false,
-  "message": "Email already exists"
-}
-```
+| Scenario                      | Response                                                   |
+| ----------------------------- | ---------------------------------------------------------- |
+| Duplicate email               | 400 — Email already exists                                 |
+| Delete default role           | 400 — Cannot delete a default role                         |
+| Delete role with active users | 400 — Cannot delete role — active users are assigned to it |
+| Login with wrong password     | 401 — Invalid email or password                            |
+| Non-admin impersonating       | 403 — Only owners can impersonate users                    |
 
 ---
 
 ## Best Practices Used
 
-### Modular Architecture
+### Modular architecture
 
-Each feature domain (restaurant, branch, user, auth) lives in its own folder with three dedicated files — routes, controller, and service. Adding a new feature means adding a new folder, nothing else changes.
+Each domain (restaurant, branch, user, role, auth) is a self-contained module with routes, controller, and service. Adding a new module means adding a new folder — nothing else changes.
 
-### Separation of Concerns
+### Separation of concerns
 
-| Layer      | Responsibility                            |
-| ---------- | ----------------------------------------- |
-| Routes     | Define endpoints and HTTP methods         |
-| Controller | Handle request/response, input validation |
-| Service    | Business logic and database queries       |
-| Config     | Database connection and environment       |
+| Layer      | Responsibility                                               |
+| ---------- | ------------------------------------------------------------ |
+| Routes     | HTTP method + path + middleware chain                        |
+| Controller | Request parsing, response formatting, error forwarding       |
+| Service    | All business logic and SQL queries                           |
+| Middleware | Cross-cutting concerns — auth, authorization, error handling |
 
-### Soft Deletes
+### Raw SQL over ORM
 
-Records are never hard deleted from the database. Instead, `is_active` is set to `false`. This preserves data integrity and allows recovery.
+Using `pg` directly with parameterized queries. Full control, no magic, easy to debug, no ORM overhead. Queries are readable and explicit.
 
-### No Plain Text Passwords
+### Two-query pattern for scoped data
 
-Passwords are always hashed with bcrypt before storage. The `password_hash` column is never returned in any API response — only `id`, `name`, `email`, and role info are exposed.
+Instead of dynamic SQL string building, two separate clean queries — one for super admin, one for scoped access. No string interpolation risk, no SQL injection surface.
 
-### Consistent API Response Format
+### Soft deletes everywhere
 
-Every response — success or error — follows the same structure:
+`is_active = false` instead of `DELETE`. Data is never lost. Reactivation is always possible.
 
-```json
-{
-  "success": true,
-  "data": {}
-}
-```
+### No plain text passwords
 
-```json
-{
-  "success": false,
-  "message": "Error description"
-}
-```
+`password_hash` column never returned in any API response. All queries explicitly select only safe columns.
 
 ---
 
 ## Future Improvements
 
-### JWT Middleware
-
-Add an `authenticate` middleware that validates the JWT token on protected routes before the request reaches the controller.
-
-### Role-Based Access Control
-
-Add an `authorize` middleware that checks the user's role from the token and restricts access to certain routes — for example, only `admin` and `manager` can create users.
-
 ### Zod Validation
 
-Add Zod schema validation on all request bodies in the controller layer to return structured validation errors instead of raw database errors.
+Add Zod schema validation on all request bodies for structured field-level error messages.
 
 ### Refresh Tokens
 
-Add a `refresh_tokens` table to support long-lived sessions with short-lived access tokens and secure token rotation on logout.
+Implement token rotation — short-lived access tokens (15 min) + long-lived refresh tokens (7 days) stored in `refresh_tokens` table.
 
 ### Pagination
 
-Add `limit` and `offset` query parameters to all list endpoints to handle large datasets efficiently.
+Add `limit` and `offset` to all list endpoints for large dataset handling.
 
-### Menu, Orders, Inventory
+### Menu Module
 
-Extend the system with additional modules for menu management, order processing, inventory tracking, and financial reporting.
+Menu categories and items at restaurant level, with branch-level price overrides.
+
+### Orders Module
+
+Order creation, item management, status tracking, payment recording.
+
+### Inventory Module
+
+Stock tracking with append-only ledger entries. Auto-deduction on order completion.
+
+### Audit Logs
+
+Universal audit trail — entity_type + entity_id + action + payload for every create/update/delete.
 
 ### Docker
 
-Containerize the API and PostgreSQL database with Docker Compose for consistent local development and deployment.
+Docker Compose setup for API + PostgreSQL for consistent dev and deployment environments.
 
 ---
 
 ## Scripts
 
 ```bash
-npm run dev      # Start development server with hot reload
-npm run build    # Compile TypeScript to JavaScript
-npm start        # Run compiled production build
+npm run dev      # Development with hot reload
+npm run build    # Compile TypeScript
+npm start        # Run compiled build
 ```
 
 ---

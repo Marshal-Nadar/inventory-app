@@ -4,10 +4,12 @@ import jwt from "jsonwebtoken";
 
 export const login = async (email: string, password: string) => {
   const result = await pool.query(
-    `SELECT u.*, r.name AS role_name, b.name AS branch_name
+    `SELECT u.*,
+            r.name AS role_name,
+            b.name AS branch_name
      FROM users u
-     JOIN roles r ON u.role_id = r.id
-     JOIN branches b ON u.branch_id = b.id
+     LEFT JOIN roles r ON u.role_id = r.id
+     LEFT JOIN branches b ON u.branch_id = b.id
      WHERE u.email = $1 AND u.is_active = true`,
     [email],
   );
@@ -27,9 +29,10 @@ export const login = async (email: string, password: string) => {
     {
       id: user.id,
       email: user.email,
-      role: user.role_name,
-      branch_id: user.branch_id,
-      restaurant_id: user.restaurant_id,
+      role: user.role_name || "super_admin",
+      branch_id: user.branch_id || null,
+      restaurant_id: user.restaurant_id || null,
+      is_super_admin: user.is_super_admin,
     },
     process.env.JWT_ACCESS_SECRET as string,
     { expiresIn: "1d" },
@@ -41,8 +44,11 @@ export const login = async (email: string, password: string) => {
       id: user.id,
       name: user.name,
       email: user.email,
-      role: user.role_name,
-      branch: user.branch_name,
+      role: user.role_name || "super_admin",
+      branch: user.branch_name || null,
+      branch_id: user.branch_id || null,
+      restaurant_id: user.restaurant_id || null,
+      is_super_admin: user.is_super_admin,
     },
   };
 };
@@ -89,6 +95,7 @@ export const impersonate = async (
       role: target.role_name,
       branch_id: target.branch_id,
       restaurant_id: target.restaurant_id,
+      is_super_admin: target.is_super_admin,
       impersonated: true,
       impersonated_by: requestingUserId,
     },
@@ -104,6 +111,8 @@ export const impersonate = async (
       email: target.email,
       role: target.role_name,
       branch: target.branch_name,
+      branch_id: target.branch_id,
+      restaurant_id: target.restaurant_id,
       impersonated: true,
       impersonated_by: requestingUserId,
     },
