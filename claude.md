@@ -66,6 +66,9 @@ inventory-app/
 │   ├── db/
 │   │   ├── migrations/
 │   │   │   └── 001_init_org_auth.sql  # Initial schema
+│   │   ├── 002_raw_materials.sql
+│   │   └── 003_vendors.sql
+│   │   └── 004_purchases.sql
 │   │   └── seeds/
 │   │       └── 001_roles.sql          # Default roles seed
 │   ├── middlewares/
@@ -93,6 +96,18 @@ inventory-app/
 │   │       ├── user.controller.ts
 │   │       ├── user.routes.ts
 │   │       └── user.service.ts
+│   │   └── purchase/
+│   │       ├── purchase.controller.ts
+│   │       ├── purchase.routes.ts
+│   │       └── purchase.service.ts
+│   │   ├── rawMaterial/
+│   │   │   ├── rawMaterial.controller.ts
+│   │   │   ├── rawMaterial.routes.ts
+│   │   │   └── rawMaterial.service.ts
+│   │   └── vendor/
+│   │       ├── vendor.controller.ts
+│   │       ├── vendor.routes.ts
+│   │       └── vendor.service.ts
 │   ├── routes/
 │   │   └── index.ts                   # Root router
 │   └── app.ts                         # Express entry point
@@ -206,6 +221,10 @@ branches         — branches per restaurant
 roles            — roles per restaurant (with is_default flag)
 users            — users with restaurant + branch + role assignment
 refresh_tokens   — JWT refresh token storage (planned)
+raw_materials    — master list of ingredients per restaurant
+vendors          — supplier/vendor list per restaurant
+purchases        — purchase header (vendor, invoice, date, total cost)
+purchase_items   — line items per purchase (raw material, qty, metric, price)
 ```
 
 ### Schema
@@ -228,6 +247,30 @@ users
 
 refresh_tokens
   id SERIAL PK, user_id FK, token UNIQUE, expires_at, created_at
+
+raw_materials
+  id SERIAL PK, restaurant_id FK, category, name,
+  metric CHECK(kg/g/l/ml/unit), is_active, created_by FK, created_at, updated_at
+  UNIQUE(restaurant_id, name)
+
+vendors
+  id SERIAL PK, restaurant_id FK, name, phone VARCHAR(10),
+  address, description, is_active, created_by FK, created_at, updated_at
+  UNIQUE(restaurant_id, phone)
+
+restaurants (updated)
+  added: storage_room_name VARCHAR(255) DEFAULT 'Main Store'
+
+purchases
+  id SERIAL PK, restaurant_id FK, vendor_id FK, invoice_number,
+  purchase_date DATE, total_cost NUMERIC(10,2), notes,
+  created_by FK, created_at, updated_at
+  UNIQUE(restaurant_id, invoice_number)
+
+purchase_items
+  id SERIAL PK, purchase_id FK ON DELETE CASCADE,
+  raw_material_id FK, quantity NUMERIC(10,3), metric CHECK(kg/g/l/ml/unit),
+  price_per_unit NUMERIC(10,2), total_cost NUMERIC(10,2), created_at
 ```
 
 ### Key design decisions
@@ -347,9 +390,74 @@ Base URL: `http://localhost:3001/api`
 | PUT    | `/api/roles/:id`            | Admin          | Update role                      |
 | DELETE | `/api/roles/:id`            | Admin          | Delete role                      |
 
+### Raw Materials
+
+| Method | Route                    | Auth                       | Description                    |
+| ------ | ------------------------ | -------------------------- | ------------------------------ |
+| GET    | `/api/raw-materials`     | Authenticated              | Get all (scoped by restaurant) |
+| GET    | `/api/raw-materials/:id` | Authenticated              | Get by ID                      |
+| POST   | `/api/raw-materials`     | Admin, Manager, Supervisor | Bulk create                    |
+| PUT    | `/api/raw-materials/:id` | Admin, Manager, Supervisor | Update                         |
+| DELETE | `/api/raw-materials/:id` | Admin, Manager, Supervisor | Soft delete                    |
+
+### Vendors
+
+| Method | Route              | Auth                       | Description                    |
+| ------ | ------------------ | -------------------------- | ------------------------------ |
+| GET    | `/api/vendors`     | Authenticated              | Get all (scoped by restaurant) |
+| GET    | `/api/vendors/:id` | Authenticated              | Get by ID                      |
+| POST   | `/api/vendors`     | Admin, Manager, Supervisor | Create vendor                  |
+| PUT    | `/api/vendors/:id` | Admin, Manager, Supervisor | Update vendor                  |
+| DELETE | `/api/vendors/:id` | Admin, Manager, Supervisor | Soft delete                    |
+
+### Purchases
+
+| Method | Route                            | Auth                       | Description                                      |
+| ------ | -------------------------------- | -------------------------- | ------------------------------------------------ |
+| GET    | `/api/purchases`                 | Authenticated              | Get all purchases (scoped, server-side filtered) |
+| GET    | `/api/purchases/purchase-report` | Authenticated              | Vendor purchase report by date range             |
+| GET    | `/api/purchases/:id`             | Authenticated              | Get purchase with line items                     |
+| POST   | `/api/purchases`                 | Admin, Manager, Supervisor | Create purchase with items (transaction)         |
+| DELETE | `/api/purchases/:id`             | Admin, Manager, Supervisor | Delete purchase + cascade items                  |
+
+**Query params for GET `/api/purchases`:**
+
+- `vendor_id` — filter by vendor
+- `invoice_number` — partial match search
+- `date_from` / `date_to` — date range filter
+
+**Query params for GET `/api/purchases/purchase-report`:**
+
+- `vendor_id` — required
+- `date_from` — required
+- `date_to` — required
+
+**Response includes stats:**
+
+```json
+{
+  "data": {
+    "purchases": [...],
+    "stats": {
+      "total_count": 4,
+      "total_spend": 3740.00
+    }
+  }
+}
+```
+
 ---
 
 ## Authentication & Authorization
+
+### Flexible Role Permission Pattern
+
+Some modules (Raw Materials, Vendors) use a flexible permitted roles array
+instead of the authorize middleware. This allows adding new roles without
+touching route definitions.
+
+const PERMITTED_ROLES = ['admin', 'manager', 'supervisor'];
+// add any future role here — routes don't change
 
 ### Password Hashing
 
@@ -457,17 +565,29 @@ All errors flow through `src/middlewares/errorHandler.ts`.
 
 ### Business rule errors
 
-| Scenario                      | Response                                                   |
-| ----------------------------- | ---------------------------------------------------------- |
-| Duplicate email               | 400 — Email already exists                                 |
-| Delete default role           | 400 — Cannot delete a default role                         |
-| Delete role with active users | 400 — Cannot delete role — active users are assigned to it |
-| Login with wrong password     | 401 — Invalid email or password                            |
-| Non-admin impersonating       | 403 — Only owners can impersonate users                    |
+| Scenario                       | Response                                                   |
+| ------------------------------ | ---------------------------------------------------------- |
+| Duplicate email                | 400 — Email already exists                                 |
+| Delete default role            | 400 — Cannot delete a default role                         |
+| Delete role with active users  | 400 — Cannot delete role — active users are assigned to it |
+| Login with wrong password      | 401 — Invalid email or password                            |
+| Non-admin impersonating        | 403 — Only owners can impersonate users                    |
+| Duplicate vendor phone         | 400 — A vendor with this phone number already exists       |
+| Invalid phone format           | 400 — Phone must be exactly 10 digits                      |
+| Duplicate raw material name    | 400 — One or more raw material names already exist         |
+| Duplicate invoice number       | 400 — Invoice number already exists for this restaurant    |
+| Missing purchase items         | 400 — At least one item is required                        |
+| purchase-report missing params | 400 — vendor_id, date_from and date_to are required        |
 
 ---
 
 ## Best Practices Used
+
+### PostgreSQL Transactions
+
+Purchase creation uses `pool.connect()` with explicit BEGIN/COMMIT/ROLLBACK.
+If any line item insert fails, the entire purchase is rolled back — no orphaned
+header records. Client is always released in the finally block.
 
 ### Modular architecture
 
@@ -514,21 +634,19 @@ Implement token rotation — short-lived access tokens (15 min) + long-lived ref
 
 Add `limit` and `offset` to all list endpoints for large dataset handling.
 
-### Menu Module
+### Menu, Orders, Inventory
 
-Menu categories and items at restaurant level, with branch-level price overrides.
-
-### Orders Module
-
-Order creation, item management, status tracking, payment recording.
-
-### Inventory Module
-
-Stock tracking with append-only ledger entries. Auto-deduction on order completion.
+Extend with menu management, order processing, inventory tracking
+(stock levels per branch using raw materials and vendors), and financials.
 
 ### Audit Logs
 
 Universal audit trail — entity_type + entity_id + action + payload for every create/update/delete.
+
+### Inventory Ledger
+
+Auto-deduct raw material stock when a purchase is created. Append-only ledger
+entries per raw material — quantity in from purchases, quantity out from production.
 
 ### Docker
 
