@@ -171,7 +171,63 @@ export const remove = async (
   }
 };
 
-export const vendorReport = async (
+export const update = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { role, is_super_admin } = req.user!;
+
+    if (!hasPermission(role, is_super_admin)) {
+      res.status(403).json({
+        success: false,
+        message: "You do not have permission to update purchases",
+      });
+      return;
+    }
+
+    const { vendor_id, invoice_number, purchase_date, notes, items } = req.body;
+
+    if (!vendor_id || !invoice_number || !purchase_date) {
+      res.status(400).json({
+        success: false,
+        message: "vendor_id, invoice_number and purchase_date are required",
+      });
+      return;
+    }
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: "At least one item is required",
+      });
+      return;
+    }
+
+    const data = await purchaseService.updatePurchase(
+      Number(req.params.id),
+      vendor_id,
+      invoice_number,
+      purchase_date,
+      notes || "",
+      items,
+    );
+
+    res.json({ success: true, data });
+  } catch (err: any) {
+    if (err.code === "23505") {
+      res.status(400).json({
+        success: false,
+        message: "Invoice number already exists for this restaurant",
+      });
+      return;
+    }
+    next(err);
+  }
+};
+
+export const purchaseReport = async (
   req: Request,
   res: Response,
   next: NextFunction,
@@ -197,7 +253,7 @@ export const vendorReport = async (
       return;
     }
 
-    const data = await purchaseService.getVendorReport(
+    const data = await purchaseService.getPurchaseReport(
       restaurant_id || 0,
       is_super_admin,
       Number(vendor_id),

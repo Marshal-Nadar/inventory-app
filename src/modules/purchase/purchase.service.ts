@@ -73,7 +73,7 @@ export const getAllPurchases = async (
   };
 };
 
-export const getVendorReport = async (
+export const getPurchaseReport = async (
   restaurantId: number,
   isSuperAdmin: boolean,
   vendorId: number,
@@ -247,6 +247,69 @@ export const createPurchase = async (
 
     await client.query("COMMIT");
     return getPurchaseById(purchase.id);
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+export const updatePurchase = async (
+  id: number,
+  vendorId: number,
+  invoiceNumber: string,
+  purchaseDate: string,
+  notes: string,
+  items: {
+    raw_material_id: number;
+    quantity: number;
+    metric: string;
+    price_per_unit: number;
+    total_cost: number;
+  }[],
+) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const totalCost = items.reduce((sum, item) => sum + item.total_cost, 0);
+
+    // update header
+    await client.query(
+      `UPDATE purchases
+       SET vendor_id = $1,
+           invoice_number = $2,
+           purchase_date = $3,
+           notes = $4,
+           total_cost = $5
+       WHERE id = $6`,
+      [vendorId, invoiceNumber, purchaseDate, notes, totalCost, id],
+    );
+
+    // delete all existing items and re-insert
+    await client.query(`DELETE FROM purchase_items WHERE purchase_id = $1`, [
+      id,
+    ]);
+
+    for (const item of items) {
+      await client.query(
+        `INSERT INTO purchase_items
+          (purchase_id, raw_material_id, quantity, metric, price_per_unit, total_cost)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          id,
+          item.raw_material_id,
+          item.quantity,
+          item.metric,
+          item.price_per_unit,
+          item.total_cost,
+        ],
+      );
+    }
+
+    await client.query("COMMIT");
+    return getPurchaseById(id);
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
