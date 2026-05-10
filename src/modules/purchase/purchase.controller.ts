@@ -25,7 +25,7 @@ export const getAll = async (
 
     const data = await purchaseService.getAllPurchases(
       is_super_admin,
-      restaurant_id,
+      restaurant_id ?? 0,
       filters,
     );
 
@@ -177,7 +177,7 @@ export const update = async (
   next: NextFunction,
 ): Promise<void> => {
   try {
-    const { role, is_super_admin } = req.user!;
+    const { role, is_super_admin, restaurant_id, id: userId } = req.user!;
 
     if (!hasPermission(role, is_super_admin)) {
       res.status(403).json({
@@ -207,11 +207,13 @@ export const update = async (
 
     const data = await purchaseService.updatePurchase(
       Number(req.params.id),
+      restaurant_id ?? 0,
       vendor_id,
       invoice_number,
       purchase_date,
       notes || "",
       items,
+      userId,
     );
 
     res.json({ success: true, data });
@@ -264,6 +266,23 @@ export const purchaseReport = async (
     res.json({ success: true, data });
   } catch (err: any) {
     console.error("Vendor Report Error:", err);
+    next(err);
+  }
+};
+
+export const stockSummary = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { is_super_admin, restaurant_id } = req.user!;
+    const data = await purchaseService.getStockSummary(
+      is_super_admin,
+      restaurant_id ?? 0,
+    );
+    res.json({ success: true, data });
+  } catch (err) {
     next(err);
   }
 };

@@ -8,7 +8,10 @@ export const getAll = async (
 ): Promise<void> => {
   try {
     const { is_super_admin, restaurant_id } = req.user!;
-    const data = await roleService.getAllRoles(is_super_admin, restaurant_id);
+    const data = await roleService.getAllRoles(
+      is_super_admin,
+      restaurant_id ?? 0,
+    );
     res.json({ success: true, data });
   } catch (err) {
     next(err);

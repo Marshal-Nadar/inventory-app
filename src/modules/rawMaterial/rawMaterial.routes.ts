@@ -12,6 +12,11 @@ router.get("/", authenticate, rawMaterialController.getAll);
 router.get("/:id", authenticate, rawMaterialController.getById);
 router.post("/", authenticate, rawMaterialController.create);
 router.put("/:id", authenticate, rawMaterialController.update);
+router.patch(
+  "/:id/min-stock",
+  authenticate,
+  rawMaterialController.updateMinStock,
+);
 router.delete("/:id", authenticate, rawMaterialController.remove);
 
 export default router;

@@ -5,9 +5,10 @@ export interface AuthUser {
   id: number;
   email: string;
   role: string;
-  branch_id: number;
-  restaurant_id: number;
+  branch_id: number | null;
+  restaurant_id: number | null;
   is_super_admin: boolean;
+  can_manage_store: boolean;
   impersonated?: boolean;
   impersonated_by?: number;
 }

@@ -10,7 +10,7 @@ export const getAll = async (
     const { is_super_admin, restaurant_id } = req.user!;
     const data = await branchService.getAllBranches(
       is_super_admin,
-      restaurant_id,
+      restaurant_id ?? 0,
     );
     res.json({ success: true, data });
   } catch (err) {

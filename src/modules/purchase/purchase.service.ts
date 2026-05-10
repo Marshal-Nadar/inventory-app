@@ -1,4 +1,5 @@
 import pool from "../../config/db";
+import { addLedgerEntry } from "../stockLedger/stockLedger.service";
 
 export const getAllPurchases = async (
   isSuperAdmin: boolean,
@@ -202,7 +203,6 @@ export const createPurchase = async (
   createdBy: number,
 ) => {
   const client = await pool.connect();
-
   try {
     await client.query("BEGIN");
 
@@ -228,12 +228,11 @@ export const createPurchase = async (
 
     const purchase = purchaseResult.rows[0];
 
-    // insert line items
     for (const item of items) {
       await client.query(
         `INSERT INTO purchase_items
-          (purchase_id, raw_material_id, quantity, metric, price_per_unit, total_cost)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+      (purchase_id, raw_material_id, quantity, metric, price_per_unit, total_cost)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           purchase.id,
           item.raw_material_id,
@@ -242,6 +241,37 @@ export const createPurchase = async (
           item.price_per_unit,
           item.total_cost,
         ],
+      );
+
+      // write ledger entry instead of direct stock update
+      await addLedgerEntry(
+        client,
+        restaurantId,
+        item.raw_material_id,
+        "purchase_in",
+        item.quantity,
+        purchase.id,
+        "purchase",
+        `Purchase from invoice ${invoiceNumber}`,
+        createdBy,
+      );
+
+      // sync current_stock from ledger
+      await client.query(
+        `UPDATE raw_materials
+     SET current_stock = (
+       SELECT COALESCE(
+         SUM(CASE
+           WHEN entry_type IN ('purchase_in', 'transfer_in') THEN quantity
+           WHEN entry_type = 'transfer_out' THEN -quantity
+           WHEN entry_type = 'adjustment' THEN quantity
+           ELSE 0
+         END), 0)
+       FROM stock_ledger
+       WHERE raw_material_id = $1
+     )
+     WHERE id = $1`,
+        [item.raw_material_id],
       );
     }
 
@@ -257,6 +287,7 @@ export const createPurchase = async (
 
 export const updatePurchase = async (
   id: number,
+  restaurantId: number,
   vendorId: number,
   invoiceNumber: string,
   purchaseDate: string,
@@ -268,6 +299,7 @@ export const updatePurchase = async (
     price_per_unit: number;
     total_cost: number;
   }[],
+  createdBy: number,
 ) => {
   const client = await pool.connect();
   try {
@@ -287,16 +319,38 @@ export const updatePurchase = async (
       [vendorId, invoiceNumber, purchaseDate, notes, totalCost, id],
     );
 
-    // delete all existing items and re-insert
+    // get old items
+    const oldItems = await client.query(
+      `SELECT raw_material_id, quantity FROM purchase_items WHERE purchase_id = $1`,
+      [id],
+    );
+
+    // reverse old stock via adjustment ledger entry
+    for (const old of oldItems.rows) {
+      await addLedgerEntry(
+        client,
+        restaurantId,
+        old.raw_material_id,
+        "adjustment",
+        -old.quantity,
+        id,
+        "purchase_update_reversal",
+        `Reversal for purchase update on invoice ${invoiceNumber}`,
+        createdBy,
+      );
+    }
+
+    // delete old items
     await client.query(`DELETE FROM purchase_items WHERE purchase_id = $1`, [
       id,
     ]);
 
+    // insert new items with ledger entries
     for (const item of items) {
       await client.query(
         `INSERT INTO purchase_items
-          (purchase_id, raw_material_id, quantity, metric, price_per_unit, total_cost)
-         VALUES ($1, $2, $3, $4, $5, $6)`,
+      (purchase_id, raw_material_id, quantity, metric, price_per_unit, total_cost)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           id,
           item.raw_material_id,
@@ -305,6 +359,36 @@ export const updatePurchase = async (
           item.price_per_unit,
           item.total_cost,
         ],
+      );
+
+      await addLedgerEntry(
+        client,
+        restaurantId,
+        item.raw_material_id,
+        "purchase_in",
+        item.quantity,
+        id,
+        "purchase",
+        `Purchase update on invoice ${invoiceNumber}`,
+        createdBy,
+      );
+
+      // sync current_stock
+      await client.query(
+        `UPDATE raw_materials
+     SET current_stock = (
+       SELECT COALESCE(
+         SUM(CASE
+           WHEN entry_type IN ('purchase_in', 'transfer_in') THEN quantity
+           WHEN entry_type = 'transfer_out' THEN -quantity
+           WHEN entry_type = 'adjustment' THEN quantity
+           ELSE 0
+         END), 0)
+       FROM stock_ledger
+       WHERE raw_material_id = $1
+     )
+     WHERE id = $1`,
+        [item.raw_material_id],
       );
     }
 
@@ -319,10 +403,125 @@ export const updatePurchase = async (
 };
 
 export const deletePurchase = async (id: number) => {
-  // purchase_items deleted via ON DELETE CASCADE
-  const result = await pool.query(
-    `DELETE FROM purchases WHERE id = $1 RETURNING *`,
-    [id],
-  );
-  return result.rows[0];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const purchaseData = await client.query(
+      `SELECT restaurant_id, invoice_number, created_by FROM purchases WHERE id = $1`,
+      [id],
+    );
+    const purchase = purchaseData.rows[0];
+
+    const items = await client.query(
+      `SELECT raw_material_id, quantity FROM purchase_items WHERE purchase_id = $1`,
+      [id],
+    );
+
+    for (const item of items.rows) {
+      await addLedgerEntry(
+        client,
+        purchase.restaurant_id,
+        item.raw_material_id,
+        "adjustment",
+        -item.quantity,
+        id,
+        "purchase_deletion",
+        `Purchase deleted — invoice ${purchase.invoice_number}`,
+        purchase.created_by,
+      );
+
+      // sync current_stock
+      await client.query(
+        `UPDATE raw_materials
+         SET current_stock = (
+           SELECT COALESCE(
+             SUM(CASE
+               WHEN entry_type IN ('purchase_in', 'transfer_in') THEN quantity
+               WHEN entry_type = 'transfer_out' THEN -quantity
+               WHEN entry_type = 'adjustment' THEN quantity
+               ELSE 0
+             END), 0)
+           FROM stock_ledger
+           WHERE raw_material_id = $1
+         )
+         WHERE id = $1`,
+        [item.raw_material_id],
+      );
+    }
+
+    const result = await client.query(
+      `DELETE FROM purchases WHERE id = $1 RETURNING *`,
+      [id],
+    );
+
+    await client.query("COMMIT");
+    return result.rows[0];
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+};
+
+export const getStockSummary = async (
+  isSuperAdmin: boolean,
+  restaurantId: number,
+) => {
+  if (isSuperAdmin) {
+    const result = await pool.query(
+      `SELECT
+         rm.id,
+         rm.name,
+         rm.category,
+         rm.metric,
+         rm.current_stock,
+         rm.min_stock,
+         r.name AS restaurant_name,
+         COALESCE(
+           SUM(pi.quantity * pi.price_per_unit) / NULLIF(SUM(pi.quantity), 0),
+           0
+         ) AS avg_price_per_unit,
+         COALESCE(SUM(pi.quantity), 0) AS total_qty_purchased,
+         COALESCE(SUM(pi.total_cost), 0) AS total_spend
+       FROM raw_materials rm
+       JOIN restaurants r ON rm.restaurant_id = r.id
+       LEFT JOIN purchase_items pi ON pi.raw_material_id = rm.id
+       LEFT JOIN purchases p ON pi.purchase_id = p.id
+       WHERE rm.is_active = true
+       GROUP BY rm.id, rm.name, rm.category, rm.metric,
+                rm.current_stock, rm.min_stock, r.name
+       ORDER BY rm.category, rm.name`,
+    );
+    return result.rows;
+  } else {
+    const result = await pool.query(
+      `SELECT
+         rm.id,
+         rm.name,
+         rm.category,
+         rm.metric,
+         rm.current_stock,
+         rm.min_stock,
+         r.name AS restaurant_name,
+         COALESCE(
+           SUM(pi.quantity * pi.price_per_unit) / NULLIF(SUM(pi.quantity), 0),
+           0
+         ) AS avg_price_per_unit,
+         COALESCE(SUM(pi.quantity), 0) AS total_qty_purchased,
+         COALESCE(SUM(pi.total_cost), 0) AS total_spend
+       FROM raw_materials rm
+       JOIN restaurants r ON rm.restaurant_id = r.id
+       LEFT JOIN purchase_items pi ON pi.raw_material_id = rm.id
+       LEFT JOIN purchases p ON pi.purchase_id = p.id
+       WHERE rm.is_active = true
+         AND rm.restaurant_id = $1
+       GROUP BY rm.id, rm.name, rm.category, rm.metric,
+                rm.current_stock, rm.min_stock, r.name
+       ORDER BY rm.category, rm.name`,
+      [restaurantId],
+    );
+    return result.rows;
+  }
 };

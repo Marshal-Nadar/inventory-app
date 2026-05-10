@@ -18,7 +18,7 @@ export const getAll = async (
     const { is_super_admin, restaurant_id } = req.user!;
     const data = await rawMaterialService.getAllRawMaterials(
       is_super_admin,
-      restaurant_id,
+      restaurant_id ?? 0,
     );
     res.json({ success: true, data });
   } catch (err) {
@@ -163,6 +163,36 @@ export const update = async (
       });
       return;
     }
+    next(err);
+  }
+};
+
+export const updateMinStock = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { min_stock } = req.body;
+    if (min_stock === undefined || min_stock < 0) {
+      res.status(400).json({
+        success: false,
+        message: "min_stock must be 0 or greater",
+      });
+      return;
+    }
+    const data = await rawMaterialService.updateMinStock(
+      Number(req.params.id),
+      min_stock,
+    );
+    if (!data) {
+      res
+        .status(404)
+        .json({ success: false, message: "Raw material not found" });
+      return;
+    }
+    res.json({ success: true, data });
+  } catch (err) {
     next(err);
   }
 };

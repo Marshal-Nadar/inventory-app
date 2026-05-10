@@ -8,7 +8,10 @@ export const getAll = async (
 ): Promise<void> => {
   try {
     const { is_super_admin, restaurant_id } = req.user!;
-    const data = await userService.getAllUsers(is_super_admin, restaurant_id);
+    const data = await userService.getAllUsers(
+      is_super_admin,
+      restaurant_id ?? 0,
+    );
     res.json({ success: true, data });
   } catch (err) {
     next(err);
@@ -25,7 +28,7 @@ export const getByBranch = async (
     const data = await userService.getUsersByBranch(
       Number(req.params.branchId),
       is_super_admin,
-      restaurant_id,
+      restaurant_id ?? 0,
     );
     res.json({ success: true, data });
   } catch (err) {

@@ -5,12 +5,13 @@ import jwt from "jsonwebtoken";
 export const login = async (email: string, password: string) => {
   const result = await pool.query(
     `SELECT u.*,
-            r.name AS role_name,
-            b.name AS branch_name
-     FROM users u
-     LEFT JOIN roles r ON u.role_id = r.id
-     LEFT JOIN branches b ON u.branch_id = b.id
-     WHERE u.email = $1 AND u.is_active = true`,
+          r.name AS role_name,
+          r.can_manage_store,
+          b.name AS branch_name
+   FROM users u
+   LEFT JOIN roles r ON u.role_id = r.id
+   LEFT JOIN branches b ON u.branch_id = b.id
+   WHERE u.email = $1 AND u.is_active = true`,
     [email],
   );
 
@@ -33,6 +34,7 @@ export const login = async (email: string, password: string) => {
       branch_id: user.branch_id || null,
       restaurant_id: user.restaurant_id || null,
       is_super_admin: user.is_super_admin,
+      can_manage_store: user.can_manage_store || false,
     },
     process.env.JWT_ACCESS_SECRET as string,
     { expiresIn: "1d" },
@@ -49,6 +51,7 @@ export const login = async (email: string, password: string) => {
       branch_id: user.branch_id || null,
       restaurant_id: user.restaurant_id || null,
       is_super_admin: user.is_super_admin,
+      can_manage_store: user.can_manage_store || false,
     },
   };
 };
@@ -96,6 +99,7 @@ export const impersonate = async (
       branch_id: target.branch_id,
       restaurant_id: target.restaurant_id,
       is_super_admin: target.is_super_admin,
+      can_manage_store: target.can_manage_store || false,
       impersonated: true,
       impersonated_by: requestingUserId,
     },
@@ -113,6 +117,7 @@ export const impersonate = async (
       branch: target.branch_name,
       branch_id: target.branch_id,
       restaurant_id: target.restaurant_id,
+      can_manage_store: target.can_manage_store || false,
       impersonated: true,
       impersonated_by: requestingUserId,
     },

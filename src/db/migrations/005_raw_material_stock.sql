@@ -1,0 +1,3 @@
+ALTER TABLE raw_materials
+  ADD COLUMN current_stock NUMERIC(10, 3) NOT NULL DEFAULT 0,
+  ADD COLUMN min_stock     NUMERIC(10, 3) NOT NULL DEFAULT 0;
