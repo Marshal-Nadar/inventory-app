@@ -32,14 +32,16 @@ export const create = async (
       can_manage_store,
       restaurant_id,
       branch_id,
+      role,
       id: userId,
     } = req.user!;
 
-    // store managers and super admin cannot raise requests
-    if (can_manage_store || is_super_admin) {
+    // only storekeeper cannot raise requests
+    // admin and super admin CAN raise on behalf of branches
+    if (role === "storekeeper") {
       res.status(403).json({
         success: false,
-        message: "Store managers cannot raise transfer requests",
+        message: "Storekeepers cannot raise transfer requests",
       });
       return;
     }
@@ -52,7 +54,20 @@ export const create = async (
       return;
     }
 
-    const { items, notes } = req.body;
+    const { items, notes, branch_id: bodyBranchId } = req.body;
+
+    // admin and super admin pass branch_id in body
+    // branch level users use their own branch_id
+    const isAdminLevel = role === "admin" || is_super_admin;
+    const finalBranchId = isAdminLevel ? bodyBranchId : branch_id;
+
+    if (!finalBranchId) {
+      res.status(400).json({
+        success: false,
+        message: "Branch is required",
+      });
+      return;
+    }
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       res.status(400).json({
@@ -74,7 +89,7 @@ export const create = async (
 
     const data = await transferRequestService.createTransferRequest(
       restaurant_id ?? 0,
-      branch_id!,
+      finalBranchId,
       items,
       notes || "",
       userId,

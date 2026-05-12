@@ -31,12 +31,18 @@ export const getAllTransferRequests = async (
     for (const req of requests) {
       const items = await pool.query(
         `SELECT tri.*,
-                rm.name AS raw_material_name,
-                rm.category AS raw_material_category,
-                rm.current_stock
-         FROM transfer_request_items tri
-         JOIN raw_materials rm ON tri.raw_material_id = rm.id
-         WHERE tri.transfer_request_id = $1`,
+          rm.name AS raw_material_name,
+          rm.category AS raw_material_category,
+          rm.current_stock,
+          COALESCE(
+            SUM(pi.quantity * pi.price_per_unit) / NULLIF(SUM(pi.quantity), 0),
+            0
+          ) AS avg_price
+   FROM transfer_request_items tri
+   JOIN raw_materials rm ON tri.raw_material_id = rm.id
+   LEFT JOIN purchase_items pi ON pi.raw_material_id = rm.id
+   WHERE tri.transfer_request_id = $1
+   GROUP BY tri.id, rm.name, rm.category, rm.current_stock`,
         [req.id],
       );
       req.items = items.rows;
@@ -66,12 +72,18 @@ export const getAllTransferRequests = async (
   for (const req of requests) {
     const items = await pool.query(
       `SELECT tri.*,
-              rm.name AS raw_material_name,
-              rm.category AS raw_material_category,
-              rm.current_stock
-       FROM transfer_request_items tri
-       JOIN raw_materials rm ON tri.raw_material_id = rm.id
-       WHERE tri.transfer_request_id = $1`,
+          rm.name AS raw_material_name,
+          rm.category AS raw_material_category,
+          rm.current_stock,
+          COALESCE(
+            SUM(pi.quantity * pi.price_per_unit) / NULLIF(SUM(pi.quantity), 0),
+            0
+          ) AS avg_price
+   FROM transfer_request_items tri
+   JOIN raw_materials rm ON tri.raw_material_id = rm.id
+   LEFT JOIN purchase_items pi ON pi.raw_material_id = rm.id
+   WHERE tri.transfer_request_id = $1
+   GROUP BY tri.id, rm.name, rm.category, rm.current_stock`,
       [req.id],
     );
     req.items = items.rows;
