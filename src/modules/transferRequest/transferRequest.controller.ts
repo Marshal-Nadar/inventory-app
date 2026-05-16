@@ -177,3 +177,35 @@ export const reject = async (
     next(err);
   }
 };
+
+export const branchStockView = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { is_super_admin, restaurant_id, branch_id } = req.user!;
+    const { date_from, date_to, branch_id: filterBranchId } = req.query;
+
+    if (!date_from || !date_to) {
+      res.status(400).json({
+        success: false,
+        message: "date_from and date_to are required",
+      });
+      return;
+    }
+
+    const data = await transferRequestService.getBranchStockView(
+      restaurant_id ?? 0,
+      branch_id,
+      date_from as string,
+      date_to as string,
+      is_super_admin,
+      filterBranchId ? Number(filterBranchId) : undefined,
+    );
+
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+};

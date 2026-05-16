@@ -291,3 +291,70 @@ export const rejectTransferRequest = async (
 
   return result.rows[0];
 };
+
+export const getBranchStockView = async (
+  restaurantId: number,
+  branchId: number | null,
+  dateFrom: string,
+  dateTo: string,
+  isSuperAdmin: boolean,
+  filterBranchId?: number,
+) => {
+  // build conditions
+  const conditions: string[] = [
+    `tr.status = 'approved'`,
+    `tr.actioned_at::date >= $1`,
+    `tr.actioned_at::date <= $2`,
+  ];
+  const params: any[] = [dateFrom, dateTo];
+  let paramIndex = 3;
+
+  if (!isSuperAdmin) {
+    conditions.push(`tr.restaurant_id = $${paramIndex++}`);
+    params.push(restaurantId);
+  }
+
+  if (filterBranchId) {
+    conditions.push(`tr.branch_id = $${paramIndex++}`);
+    params.push(filterBranchId);
+  } else if (!isSuperAdmin && branchId) {
+    conditions.push(`tr.branch_id = $${paramIndex++}`);
+    params.push(branchId);
+  }
+
+  const whereClause = `WHERE ${conditions.join(" AND ")}`;
+
+  // get all approved transfers in range
+  const result = await pool.query(
+    `SELECT
+       tr.id AS transfer_id,
+       tr.actioned_at AS transfer_time,
+       tr.branch_id,
+       b.name AS branch_name,
+       r.name AS restaurant_name,
+       tri.raw_material_id,
+       rm.name AS raw_material_name,
+       rm.category,
+       tri.quantity,
+       tri.metric,
+       COALESCE(
+         SUM(pi.quantity * pi.price_per_unit) / NULLIF(SUM(pi.quantity), 0),
+         0
+       ) AS avg_price
+     FROM transfer_requests tr
+     JOIN transfer_request_items tri ON tri.transfer_request_id = tr.id
+     JOIN raw_materials rm ON tri.raw_material_id = rm.id
+     JOIN branches b ON tr.branch_id = b.id
+     JOIN restaurants r ON tr.restaurant_id = r.id
+     LEFT JOIN purchase_items pi ON pi.raw_material_id = rm.id
+     ${whereClause}
+     GROUP BY
+       tr.id, tr.actioned_at, tr.branch_id,
+       b.name, r.name, tri.raw_material_id,
+       rm.name, rm.category, tri.quantity, tri.metric
+     ORDER BY tr.actioned_at DESC`,
+    params,
+  );
+
+  return result.rows;
+};

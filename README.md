@@ -69,6 +69,7 @@ inventory-app/
 │   │   ├── 002_raw_materials.sql
 │   │   └── 003_vendors.sql
 │   │   └── 004_purchases.sql
+|   |   |__ 005_raw_material_stock.sql
 │   │   └── seeds/
 │   │       └── 001_roles.sql          # Default roles seed
 │   ├── middlewares/
