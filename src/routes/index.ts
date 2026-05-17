@@ -12,6 +12,8 @@ import transferRequestRoutes from "../modules/transferRequest/transferRequest.ro
 import vendorPaymentRoutes from "../modules/vendorPayment/vendorPayment.routes";
 import expenseTypeRoutes from "../modules/expenseType/expenseType.routes";
 import miscExpenseRoutes from "../modules/miscExpense/miscExpense.routes";
+import productRoutes from "../modules/product/product.routes";
+import preBookingRoutes from "../modules/preBooking/preBooking.routes";
 
 const router = Router();
 
@@ -28,5 +30,8 @@ router.use("/transfer-requests", transferRequestRoutes);
 router.use("/vendor-payments", vendorPaymentRoutes);
 router.use("/expense-types", expenseTypeRoutes);
 router.use("/misc-expenses", miscExpenseRoutes);
+router.use("/products", productRoutes);
+
+router.use("/pre-bookings", preBookingRoutes);
 
 export default router;

@@ -115,6 +115,62 @@ export const create = async (
   }
 };
 
+export const update = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { role, is_super_admin } = req.user!;
+    const isAdmin = role === "admin" || is_super_admin;
+
+    if (!isAdmin) {
+      res.status(403).json({
+        success: false,
+        message: "Only admin can edit expenses",
+      });
+      return;
+    }
+
+    const {
+      expense_type_id,
+      subcategory_id,
+      amount,
+      payment_method,
+      expense_date,
+      notes,
+    } = req.body;
+
+    if (!expense_type_id || !amount || !payment_method || !expense_date) {
+      res.status(400).json({
+        success: false,
+        message:
+          "expense_type_id, amount, payment_method and expense_date are required",
+      });
+      return;
+    }
+
+    const data = await miscExpenseService.updateMiscExpense(
+      Number(req.params.id),
+      expense_type_id,
+      subcategory_id || null,
+      amount,
+      payment_method,
+      expense_date,
+      notes || "",
+    );
+
+    if (!data) {
+      res.status(404).json({ success: false, message: "Expense not found" });
+      return;
+    }
+
+    res.json({ success: true, data });
+  } catch (err) {
+    next(err);
+  }
+};
+
 export const remove = async (
   req: Request,
   res: Response,
@@ -145,6 +201,51 @@ export const remove = async (
     }
 
     res.json({ success: true, message: "Expense deleted", data });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getReport = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const { role, is_super_admin, restaurant_id, can_manage_store } = req.user!;
+
+    const isAllowed = is_super_admin || role === "admin" || can_manage_store;
+
+    if (!isAllowed) {
+      res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+      return;
+    }
+
+    const { date_from, date_to, branch_id, payment_method } = req.query;
+
+    if (!date_from || !date_to) {
+      res.status(400).json({
+        success: false,
+        message: "date_from and date_to are required",
+      });
+      return;
+    }
+
+    const data = await miscExpenseService.getMiscExpenseReport(
+      is_super_admin,
+      restaurant_id ?? 0,
+      {
+        date_from: date_from as string,
+        date_to: date_to as string,
+        branch_id: branch_id ? Number(branch_id) : undefined,
+        payment_method: payment_method as string | undefined,
+      },
+    );
+
+    res.json({ success: true, data });
   } catch (err) {
     next(err);
   }
