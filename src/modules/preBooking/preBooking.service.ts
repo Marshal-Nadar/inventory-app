@@ -195,6 +195,22 @@ export const createPreBooking = async (
       );
     }
 
+    // insert initial payment into history if amount_paid > 0
+    if (amountPaid > 0) {
+      await client.query(
+        `INSERT INTO pre_booking_payments
+      (booking_id, amount, payment_method, remarks, created_by)
+     VALUES ($1, $2, $3, $4, $5)`,
+        [
+          booking.id,
+          amountPaid,
+          paymentMethod || "cash",
+          "Initial payment at booking",
+          createdBy,
+        ],
+      );
+    }
+
     await client.query("COMMIT");
     return getPreBookingById(booking.id);
   } catch (err) {

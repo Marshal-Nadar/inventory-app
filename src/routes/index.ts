@@ -14,6 +14,7 @@ import expenseTypeRoutes from "../modules/expenseType/expenseType.routes";
 import miscExpenseRoutes from "../modules/miscExpense/miscExpense.routes";
 import productRoutes from "../modules/product/product.routes";
 import preBookingRoutes from "../modules/preBooking/preBooking.routes";
+import dailySalesRoutes from "../modules/dailySales/dailySales.routes";
 
 const router = Router();
 
@@ -31,7 +32,7 @@ router.use("/vendor-payments", vendorPaymentRoutes);
 router.use("/expense-types", expenseTypeRoutes);
 router.use("/misc-expenses", miscExpenseRoutes);
 router.use("/products", productRoutes);
-
 router.use("/pre-bookings", preBookingRoutes);
+router.use("/daily-sales", dailySalesRoutes);
 
 export default router;
