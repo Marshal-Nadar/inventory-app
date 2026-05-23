@@ -9,13 +9,21 @@ export const getAll = async (
   try {
     const { is_super_admin, restaurant_id, branch_id, can_manage_store } =
       req.user!;
-    const data = await preBookingService.getAllPreBookings(
+    const { status, page = "1", limit = "20" } = req.query;
+
+    const result = await preBookingService.getAllPreBookings(
       is_super_admin,
       restaurant_id ?? 0,
       branch_id,
       can_manage_store,
+      {
+        status: status as string,
+        page: Number(page),
+        limit: Number(limit),
+      },
     );
-    res.json({ success: true, data });
+
+    res.json({ success: true, ...result });
   } catch (err) {
     next(err);
   }

@@ -24,25 +24,52 @@ export const getAllPreBookings = async (
   restaurantId: number,
   branchId: number | null,
   canManageStore: boolean,
+  filters: {
+    status?: string;
+    page: number;
+    limit: number;
+  },
 ) => {
-  let whereClause = "";
+  const conditions: string[] = [];
   const params: any[] = [];
   let idx = 1;
 
-  if (isSuperAdmin) {
-    whereClause = "";
-  } else if (canManageStore) {
-    whereClause = `WHERE pb.restaurant_id = $${idx++}`;
+  if (!isSuperAdmin) {
+    conditions.push(`pb.restaurant_id = $${idx++}`);
     params.push(restaurantId);
-  } else {
-    whereClause = `WHERE pb.branch_id = $${idx++}`;
+  }
+
+  if (!isSuperAdmin && !canManageStore && branchId) {
+    conditions.push(`pb.branch_id = $${idx++}`);
     params.push(branchId);
   }
 
+  if (filters.status) {
+    conditions.push(`pb.order_status = $${idx++}`);
+    params.push(filters.status);
+  }
+
+  const whereClause =
+    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const countResult = await pool.query(
+    `SELECT COUNT(*) FROM pre_bookings pb ${whereClause}`,
+    params,
+  );
+  const total = Number(countResult.rows[0].count);
+
+  const offset = (filters.page - 1) * filters.limit;
+
   const result = await pool.query(
     `SELECT
-       pb.*,
+       pb.id, pb.order_id, pb.restaurant_id, pb.branch_id,
+       pb.customer_name, pb.mobile, pb.email, pb.delivery_address,
+       pb.subtotal, pb.product_discount_total, pb.overall_discount,
+       pb.final_amount, pb.amount_paid, pb.pending_balance,
+       pb.payment_method, pb.payment_status, pb.order_status,
        TO_CHAR(pb.delivery_date, 'YYYY-MM-DD') AS delivery_date,
+       pb.delivery_time, pb.remarks, pb.notes,
+       pb.created_by, pb.created_at, pb.updated_at,
        b.name AS branch_name,
        r.name AS restaurant_name,
        u.name AS created_by_name
@@ -51,10 +78,20 @@ export const getAllPreBookings = async (
      JOIN restaurants r ON pb.restaurant_id = r.id
      LEFT JOIN users u ON pb.created_by = u.id
      ${whereClause}
-     ORDER BY pb.delivery_date ASC, pb.created_at DESC`,
-    params,
+     ORDER BY pb.created_at DESC
+     LIMIT $${idx++} OFFSET $${idx++}`,
+    [...params, filters.limit, offset],
   );
-  return result.rows;
+
+  return {
+    data: result.rows,
+    pagination: {
+      total,
+      page: filters.page,
+      limit: filters.limit,
+      totalPages: Math.ceil(total / filters.limit),
+    },
+  };
 };
 
 export const getPreBookingById = async (id: number) => {

@@ -31,14 +31,36 @@ export const createRestaurant = async (
 
 export const updateRestaurant = async (
   id: number,
-  name: string,
-  slug: string,
-  timezone: string,
+  data: {
+    name?: string;
+    slug?: string;
+    timezone?: string;
+    storage_room_name?: string;
+    print_company_name?: string;
+    print_address?: string;
+    print_contact?: string;
+    print_footer_note?: string;
+  },
 ) => {
   const result = await pool.query(
-    `UPDATE restaurants SET name = $1, slug = $2, timezone = $3
-     WHERE id = $4 RETURNING *`,
-    [name, slug, timezone, id],
+    `UPDATE restaurants SET
+       name = COALESCE($1, name),
+       storage_room_name = COALESCE($2, storage_room_name),
+       print_company_name = $3,
+       print_address = $4,
+       print_contact = $5,
+       print_footer_note = $6
+     WHERE id = $7
+     RETURNING *`,
+    [
+      data.name,
+      data.storage_room_name,
+      data.print_company_name ?? null,
+      data.print_address ?? null,
+      data.print_contact ?? null,
+      data.print_footer_note ?? null,
+      id,
+    ],
   );
   return result.rows[0];
 };

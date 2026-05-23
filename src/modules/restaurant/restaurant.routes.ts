@@ -32,4 +32,15 @@ router.patch(
   restaurantController.activate,
 );
 
+router.patch(
+  "/:id/print-settings",
+  authenticate,
+  restaurantController.updatePrintSettings,
+);
+router.get(
+  "/:id/print-settings",
+  authenticate,
+  restaurantController.getPrintSettings,
+);
+
 export default router;
