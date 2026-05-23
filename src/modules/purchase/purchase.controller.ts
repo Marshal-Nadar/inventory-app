@@ -15,21 +15,29 @@ export const getAll = async (
 ): Promise<void> => {
   try {
     const { is_super_admin, restaurant_id } = req.user!;
+    const {
+      vendor_id,
+      invoice_number,
+      date_from,
+      date_to,
+      page = "1",
+      limit = "20",
+    } = req.query;
 
-    const filters = {
-      vendor_id: req.query.vendor_id ? Number(req.query.vendor_id) : undefined,
-      invoice_number: req.query.invoice_number as string | undefined,
-      date_from: req.query.date_from as string | undefined,
-      date_to: req.query.date_to as string | undefined,
-    };
-
-    const data = await purchaseService.getAllPurchases(
+    const result = await purchaseService.getAllPurchases(
       is_super_admin,
       restaurant_id ?? 0,
-      filters,
+      {
+        vendor_id: vendor_id ? Number(vendor_id) : undefined,
+        invoice_number: invoice_number as string,
+        date_from: date_from as string,
+        date_to: date_to as string,
+        page: Number(page),
+        limit: Number(limit),
+      },
     );
 
-    res.json({ success: true, data });
+    res.json({ success: true, ...result });
   } catch (err) {
     next(err);
   }

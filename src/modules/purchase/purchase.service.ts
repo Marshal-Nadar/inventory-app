@@ -9,67 +9,74 @@ export const getAllPurchases = async (
     invoice_number?: string;
     date_from?: string;
     date_to?: string;
+    page: number;
+    limit: number;
   },
 ) => {
   const conditions: string[] = [];
   const params: any[] = [];
-  let paramIndex = 1;
+  let idx = 1;
 
   if (!isSuperAdmin) {
-    conditions.push(`p.restaurant_id = $${paramIndex++}`);
+    conditions.push(`p.restaurant_id = $${idx++}`);
     params.push(restaurantId);
   }
-
   if (filters.vendor_id) {
-    conditions.push(`p.vendor_id = $${paramIndex++}`);
+    conditions.push(`p.vendor_id = $${idx++}`);
     params.push(filters.vendor_id);
   }
-
   if (filters.invoice_number) {
-    conditions.push(`p.invoice_number ILIKE $${paramIndex++}`);
+    conditions.push(`p.invoice_number ILIKE $${idx++}`);
     params.push(`%${filters.invoice_number}%`);
   }
-
   if (filters.date_from) {
-    conditions.push(`p.purchase_date >= $${paramIndex++}`);
+    conditions.push(`p.purchase_date >= $${idx++}::date`);
     params.push(filters.date_from);
   }
-
   if (filters.date_to) {
-    conditions.push(`p.purchase_date <= $${paramIndex++}`);
+    conditions.push(`p.purchase_date <= $${idx++}::date`);
     params.push(filters.date_to);
   }
 
   const whereClause =
     conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-  const result = await pool.query(
-    `SELECT p.*,
-            v.name AS vendor_name,
-            r.name AS restaurant_name,
-            r.storage_room_name,
-            u.name AS created_by_name
-     FROM purchases p
-     JOIN vendors v ON p.vendor_id = v.id
-     JOIN restaurants r ON p.restaurant_id = r.id
-     LEFT JOIN users u ON p.created_by = u.id
-     ${whereClause}
-     ORDER BY p.purchase_date DESC, p.created_at DESC`,
+  // total count
+  const countResult = await pool.query(
+    `SELECT COUNT(*) 
+   FROM purchases p
+   LEFT JOIN vendors v ON p.vendor_id = v.id
+   LEFT JOIN restaurants r ON p.restaurant_id = r.id
+   ${whereClause}`,
     params,
   );
 
-  // aggregate stats from same filtered result
-  const totalCount = result.rows.length;
-  const totalSpend = result.rows.reduce(
-    (sum: number, row: any) => sum + Number(row.total_cost),
-    0,
+  const total = Number(countResult.rows[0].count);
+
+  // paginated data
+  const offset = (filters.page - 1) * filters.limit;
+  const dataResult = await pool.query(
+    `SELECT 
+     p.*,
+     v.name AS vendor_name,
+     r.name AS restaurant_name,
+     r.storage_room_name AS storage_room_name
+   FROM purchases p
+   LEFT JOIN vendors v ON p.vendor_id = v.id
+   LEFT JOIN restaurants r ON p.restaurant_id = r.id
+   ${whereClause}
+   ORDER BY p.purchase_date DESC, p.id DESC
+   LIMIT $${idx++} OFFSET $${idx++}`,
+    [...params, filters.limit, offset],
   );
 
   return {
-    purchases: result.rows,
-    stats: {
-      total_count: totalCount,
-      total_spend: Number(totalSpend.toFixed(2)),
+    data: dataResult.rows,
+    pagination: {
+      total,
+      page: filters.page,
+      limit: filters.limit,
+      totalPages: Math.ceil(total / filters.limit),
     },
   };
 };
