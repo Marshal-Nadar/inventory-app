@@ -15,6 +15,7 @@ import miscExpenseRoutes from "../modules/miscExpense/miscExpense.routes";
 import productRoutes from "../modules/product/product.routes";
 import preBookingRoutes from "../modules/preBooking/preBooking.routes";
 import dailySalesRoutes from "../modules/dailySales/dailySales.routes";
+import dashboardRoutes from "../modules/dashboard/dashboard.routes";
 
 const router = Router();
 
@@ -34,5 +35,6 @@ router.use("/misc-expenses", miscExpenseRoutes);
 router.use("/products", productRoutes);
 router.use("/pre-bookings", preBookingRoutes);
 router.use("/daily-sales", dailySalesRoutes);
+router.use("/dashboard", dashboardRoutes);
 
 export default router;
