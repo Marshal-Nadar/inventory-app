@@ -117,19 +117,19 @@ export const getPurchaseReport = async (
   // purchases list in range
   const purchases = await pool.query(
     `SELECT
-       p.id,
-       p.invoice_number,
-       p.purchase_date,
-       p.total_cost,
-       r.name AS restaurant_name,
-       r.storage_room_name
-     FROM purchases p
-     JOIN restaurants r ON p.restaurant_id = r.id
-     WHERE p.vendor_id = $1
-       AND p.purchase_date >= $2
-       AND p.purchase_date <= $3
-       ${restaurantCondition}
-     ORDER BY p.purchase_date DESC`,
+     p.id,
+     p.invoice_number,
+     TO_CHAR(p.purchase_date, 'YYYY-MM-DD') AS purchase_date,
+     p.total_cost,
+     r.name AS restaurant_name,
+     r.storage_room_name
+   FROM purchases p
+   JOIN restaurants r ON p.restaurant_id = r.id
+   WHERE p.vendor_id = $1
+     AND p.purchase_date >= $2
+     AND p.purchase_date <= $3
+     ${restaurantCondition}
+   ORDER BY p.purchase_date DESC`,
     params,
   );
 
@@ -153,9 +153,30 @@ export const getPurchaseReport = async (
     params,
   );
 
+  // fetch items for each purchase
+  const purchasesWithItems = await Promise.all(
+    purchases.rows.map(async (p) => {
+      const items = await pool.query(
+        `SELECT
+         pi.quantity,
+         pi.metric,
+         pi.price_per_unit,
+         pi.total_cost,
+         rm.name AS raw_material_name,
+         rm.category
+       FROM purchase_items pi
+       JOIN raw_materials rm ON pi.raw_material_id = rm.id
+       WHERE pi.purchase_id = $1
+       ORDER BY pi.id`,
+        [p.id],
+      );
+      return { ...p, items: items.rows };
+    }),
+  );
+
   return {
     summary: summary.rows[0] || null,
-    purchases: purchases.rows,
+    purchases: purchasesWithItems,
     materials: materials.rows,
   };
 };

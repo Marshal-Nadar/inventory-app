@@ -209,3 +209,53 @@ export const branchStockView = async (
     next(err);
   }
 };
+
+export const update = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> => {
+  try {
+    const {
+      role,
+      is_super_admin,
+      can_manage_store,
+      branch_id,
+      id: userId,
+    } = req.user!;
+    const { items, notes } = req.body;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      res.status(400).json({
+        success: false,
+        message: "At least one item is required",
+      });
+      return;
+    }
+
+    for (const item of items) {
+      if (!item.raw_material_id || !item.quantity || !item.metric) {
+        res.status(400).json({
+          success: false,
+          message: "Each item must have raw_material_id, quantity and metric",
+        });
+        return;
+      }
+    }
+
+    const data = await transferRequestService.updateTransferRequest(
+      Number(req.params.id),
+      items,
+      notes || "",
+      userId,
+    );
+
+    res.json({ success: true, data });
+  } catch (err: any) {
+    if (err.status) {
+      res.status(err.status).json({ success: false, message: err.message });
+      return;
+    }
+    next(err);
+  }
+};

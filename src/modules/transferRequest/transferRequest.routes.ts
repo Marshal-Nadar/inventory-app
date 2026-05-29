@@ -6,6 +6,7 @@ const router = Router();
 
 router.get("/", authenticate, transferRequestController.getAll);
 router.post("/", authenticate, transferRequestController.create);
+router.put("/:id", authenticate, transferRequestController.update);
 router.patch("/:id/approve", authenticate, transferRequestController.approve);
 router.patch("/:id/reject", authenticate, transferRequestController.reject);
 router.get(

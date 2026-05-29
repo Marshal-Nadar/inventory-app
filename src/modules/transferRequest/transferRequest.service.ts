@@ -358,3 +358,96 @@ export const getBranchStockView = async (
 
   return result.rows;
 };
+
+export const updateTransferRequest = async (
+  id: number,
+  items: {
+    raw_material_id: number;
+    quantity: number;
+    metric: string;
+  }[],
+  notes: string,
+  userId: number,
+) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // check request exists and is still pending
+    const reqResult = await client.query(
+      `SELECT * FROM transfer_requests WHERE id = $1`,
+      [id],
+    );
+
+    if (!reqResult.rows[0]) {
+      throw { status: 404, message: "Transfer request not found" };
+    }
+
+    if (reqResult.rows[0].status !== "pending") {
+      throw {
+        status: 400,
+        message: "Only pending requests can be edited",
+      };
+    }
+
+    // validate stock for all items
+    for (const item of items) {
+      const stockResult = await client.query(
+        `SELECT current_stock, name FROM raw_materials WHERE id = $1`,
+        [item.raw_material_id],
+      );
+
+      if (!stockResult.rows[0]) {
+        throw {
+          status: 404,
+          message: `Raw material ID ${item.raw_material_id} not found`,
+        };
+      }
+
+      const currentStock = Number(stockResult.rows[0].current_stock);
+
+      if (currentStock <= 0) {
+        throw {
+          status: 400,
+          message: `${stockResult.rows[0].name} is out of stock`,
+        };
+      }
+
+      if (item.quantity > currentStock) {
+        throw {
+          status: 400,
+          message: `${stockResult.rows[0].name}: requested ${item.quantity} but only ${currentStock} available`,
+        };
+      }
+    }
+
+    // update notes
+    await client.query(
+      `UPDATE transfer_requests SET notes = $1 WHERE id = $2`,
+      [notes, id],
+    );
+
+    // replace items
+    await client.query(
+      `DELETE FROM transfer_request_items WHERE transfer_request_id = $1`,
+      [id],
+    );
+
+    for (const item of items) {
+      await client.query(
+        `INSERT INTO transfer_request_items
+          (transfer_request_id, raw_material_id, quantity, metric)
+         VALUES ($1, $2, $3, $4)`,
+        [id, item.raw_material_id, item.quantity, item.metric],
+      );
+    }
+
+    await client.query("COMMIT");
+    return reqResult.rows[0];
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+};
