@@ -193,3 +193,60 @@ export const getDashboardStats = async (
     recent_purchases: recentPurchases.rows,
   };
 };
+
+export const getSuperAdminStats = async () => {
+  const today = new Date().toLocaleDateString("en-CA");
+
+  // platform-wide totals
+  const totals = await pool.query(
+    `
+    SELECT
+      (SELECT COUNT(*) FROM restaurants WHERE is_active) AS total_restaurants,
+      (SELECT COUNT(*) FROM branches WHERE is_active) AS total_branches,
+      (SELECT COUNT(*) FROM users WHERE is_active) AS total_users,
+      (SELECT COALESCE(SUM(net_sales),0) FROM daily_sales
+        WHERE sale_date = $1) AS today_sales,
+      (SELECT COUNT(*) FROM pre_bookings
+        WHERE order_status = 'pending') AS pending_prebookings,
+      (SELECT COUNT(*) FROM transfer_requests
+        WHERE status = 'pending') AS pending_transfers
+  `,
+    [today],
+  );
+
+  // per-restaurant breakdown
+  const restaurants = await pool.query(
+    `
+    SELECT
+      r.id,
+      r.name,
+      r.is_active,
+      (SELECT COUNT(*) FROM branches b
+        WHERE b.restaurant_id = r.id AND b.is_active) AS active_branches,
+      (SELECT COUNT(*) FROM users u
+        WHERE u.restaurant_id = r.id AND u.is_active) AS active_users,
+      (SELECT COALESCE(SUM(net_sales),0) FROM daily_sales ds
+        WHERE ds.restaurant_id = r.id
+        AND ds.sale_date = $1) AS today_sales,
+      (SELECT COALESCE(SUM(net_sales),0) FROM daily_sales ds
+        WHERE ds.restaurant_id = r.id
+        AND ds.sale_date >= date_trunc('month', CURRENT_DATE)) AS month_sales,
+      (SELECT COUNT(*) FROM pre_bookings pb
+        WHERE pb.restaurant_id = r.id
+        AND pb.order_status = 'pending') AS pending_prebookings,
+      (SELECT COUNT(*) FROM transfer_requests tr
+        WHERE tr.restaurant_id = r.id
+        AND tr.status = 'pending') AS pending_transfers,
+      (SELECT COUNT(*) FROM purchases p
+        WHERE p.restaurant_id = r.id) AS total_purchases
+    FROM restaurants r
+    ORDER BY r.name
+  `,
+    [today],
+  );
+
+  return {
+    totals: totals.rows[0],
+    restaurants: restaurants.rows,
+  };
+};
