@@ -9,13 +9,21 @@ export const getAll = async (
   try {
     const { is_super_admin, restaurant_id, branch_id, can_manage_store } =
       req.user!;
-    const data = await miscExpenseService.getAllMiscExpenses(
+    const { date, page = "1", limit = "20" } = req.query;
+
+    const result = await miscExpenseService.getAllMiscExpenses(
       is_super_admin,
       restaurant_id ?? 0,
       branch_id,
       can_manage_store,
+      {
+        date: date as string,
+        page: Number(page),
+        limit: Number(limit),
+      },
     );
-    res.json({ success: true, data });
+
+    res.json({ success: true, ...result });
   } catch (err) {
     next(err);
   }

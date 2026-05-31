@@ -6,50 +6,43 @@ export const getAllTransferRequests = async (
   canManageStore: boolean,
   restaurantId: number,
   branchId: number | null,
+  filters: {
+    status?: string;
+    page: number;
+    limit: number;
+  },
 ) => {
-  if (isSuperAdmin || canManageStore) {
-    const result = await pool.query(
-      `SELECT tr.*,
-              b.name AS branch_name,
-              r.name AS restaurant_name,
-              u1.name AS requested_by_name,
-              u2.name AS actioned_by_name
-       FROM transfer_requests tr
-       JOIN branches b ON tr.branch_id = b.id
-       JOIN restaurants r ON tr.restaurant_id = r.id
-       JOIN users u1 ON tr.requested_by = u1.id
-       LEFT JOIN users u2 ON tr.actioned_by = u2.id
-       ${!isSuperAdmin ? "WHERE tr.restaurant_id = $1" : ""}
-       ORDER BY
-         CASE tr.status WHEN 'pending' THEN 1 WHEN 'approved' THEN 2 ELSE 3 END,
-         tr.created_at DESC`,
-      !isSuperAdmin ? [restaurantId] : [],
-    );
+  const conditions: string[] = [];
+  const params: any[] = [];
+  let idx = 1;
 
-    // fetch items for each request
-    const requests = result.rows;
-    for (const req of requests) {
-      const items = await pool.query(
-        `SELECT tri.*,
-          rm.name AS raw_material_name,
-          rm.category AS raw_material_category,
-          rm.current_stock,
-          COALESCE(
-            SUM(pi.quantity * pi.price_per_unit) / NULLIF(SUM(pi.quantity), 0),
-            0
-          ) AS avg_price
-   FROM transfer_request_items tri
-   JOIN raw_materials rm ON tri.raw_material_id = rm.id
-   LEFT JOIN purchase_items pi ON pi.raw_material_id = rm.id
-   WHERE tri.transfer_request_id = $1
-   GROUP BY tri.id, rm.name, rm.category, rm.current_stock`,
-        [req.id],
-      );
-      req.items = items.rows;
+  if (!isSuperAdmin) {
+    if (canManageStore) {
+      conditions.push(`tr.restaurant_id = $${idx++}`);
+      params.push(restaurantId);
+    } else {
+      conditions.push(`tr.branch_id = $${idx++}`);
+      params.push(branchId);
     }
-    return requests;
   }
 
+  if (filters.status) {
+    conditions.push(`tr.status = $${idx++}`);
+    params.push(filters.status);
+  }
+
+  const whereClause =
+    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  // count
+  const countResult = await pool.query(
+    `SELECT COUNT(*) FROM transfer_requests tr ${whereClause}`,
+    params,
+  );
+  const total = Number(countResult.rows[0].count);
+
+  // paginated
+  const offset = (filters.page - 1) * filters.limit;
   const result = await pool.query(
     `SELECT tr.*,
             b.name AS branch_name,
@@ -61,34 +54,43 @@ export const getAllTransferRequests = async (
      JOIN restaurants r ON tr.restaurant_id = r.id
      JOIN users u1 ON tr.requested_by = u1.id
      LEFT JOIN users u2 ON tr.actioned_by = u2.id
-     WHERE tr.branch_id = $1
+     ${whereClause}
      ORDER BY
        CASE tr.status WHEN 'pending' THEN 1 WHEN 'approved' THEN 2 ELSE 3 END,
-       tr.created_at DESC`,
-    [branchId],
+       tr.created_at DESC
+     LIMIT $${idx++} OFFSET $${idx++}`,
+    [...params, filters.limit, offset],
   );
 
   const requests = result.rows;
   for (const req of requests) {
     const items = await pool.query(
       `SELECT tri.*,
-          rm.name AS raw_material_name,
-          rm.category AS raw_material_category,
-          rm.current_stock,
-          COALESCE(
-            SUM(pi.quantity * pi.price_per_unit) / NULLIF(SUM(pi.quantity), 0),
-            0
-          ) AS avg_price
-   FROM transfer_request_items tri
-   JOIN raw_materials rm ON tri.raw_material_id = rm.id
-   LEFT JOIN purchase_items pi ON pi.raw_material_id = rm.id
-   WHERE tri.transfer_request_id = $1
-   GROUP BY tri.id, rm.name, rm.category, rm.current_stock`,
+              rm.name AS raw_material_name,
+              rm.category AS raw_material_category,
+              rm.current_stock,
+              COALESCE(
+                SUM(pi.quantity * pi.price_per_unit) / NULLIF(SUM(pi.quantity), 0), 0
+              ) AS avg_price
+       FROM transfer_request_items tri
+       JOIN raw_materials rm ON tri.raw_material_id = rm.id
+       LEFT JOIN purchase_items pi ON pi.raw_material_id = rm.id
+       WHERE tri.transfer_request_id = $1
+       GROUP BY tri.id, rm.name, rm.category, rm.current_stock`,
       [req.id],
     );
     req.items = items.rows;
   }
-  return requests;
+
+  return {
+    data: requests,
+    pagination: {
+      total,
+      page: filters.page,
+      limit: filters.limit,
+      totalPages: Math.ceil(total / filters.limit),
+    },
+  };
 };
 
 export const createTransferRequest = async (

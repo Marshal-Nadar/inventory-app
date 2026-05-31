@@ -123,3 +123,76 @@ export const impersonate = async (
     },
   };
 };
+
+export const changePassword = async (
+  userId: number,
+  currentPassword: string,
+  newPassword: string,
+) => {
+  const result = await pool.query(
+    `SELECT password_hash FROM users WHERE id = $1`,
+    [userId],
+  );
+
+  if (!result.rows[0]) {
+    throw { status: 404, message: "User not found" };
+  }
+
+  // verify current password
+  const isMatch = await bcrypt.compare(
+    currentPassword,
+    result.rows[0].password_hash,
+  );
+
+  if (!isMatch) {
+    throw { status: 400, message: "Current password is incorrect" };
+  }
+
+  if (newPassword.length < 6) {
+    throw {
+      status: 400,
+      message: "New password must be at least 6 characters",
+    };
+  }
+
+  const newHash = await bcrypt.hash(newPassword, 10);
+
+  await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [
+    newHash,
+    userId,
+  ]);
+
+  return { message: "Password changed successfully" };
+};
+
+export const resetPassword = async (
+  adminId: number,
+  targetUserId: number,
+  newPassword: string,
+  isSuperAdmin: boolean,
+  adminRestaurantId: number,
+) => {
+  // verify target user belongs to same restaurant
+  if (!isSuperAdmin) {
+    const check = await pool.query(
+      `SELECT id FROM users WHERE id = $1 AND restaurant_id = $2`,
+      [targetUserId, adminRestaurantId],
+    );
+    if (!check.rows[0]) {
+      throw { status: 403, message: "Access denied" };
+    }
+  }
+
+  if (newPassword.length < 6) {
+    throw { status: 400, message: "Password must be at least 6 characters" };
+  }
+
+  const newHash = await bcrypt.hash(newPassword, 10);
+
+  await pool.query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [
+    newHash,
+    targetUserId,
+  ]);
+
+  return { message: "Password reset successfully" };
+};

@@ -69,70 +69,75 @@ export const getAllMiscExpenses = async (
   restaurantId: number,
   branchId: number | null,
   canManageStore: boolean,
+  filters: {
+    date?: string;
+    page: number;
+    limit: number;
+  },
 ) => {
-  if (isSuperAdmin) {
-    const result = await pool.query(
-      `SELECT
-         me.*,
-         et.name AS expense_type_name,
-         es.name AS subcategory_name,
-         b.name AS branch_name,
-         r.name AS restaurant_name,
-         u.name AS created_by_name
-       FROM misc_expenses me
-       JOIN expense_types et ON me.expense_type_id = et.id
-       LEFT JOIN expense_subcategories es ON me.subcategory_id = es.id
-       JOIN branches b ON me.branch_id = b.id
-       JOIN restaurants r ON me.restaurant_id = r.id
-       LEFT JOIN users u ON me.created_by = u.id
-       ORDER BY me.expense_date DESC, me.created_at DESC`,
-    );
-    return result.rows;
+  const conditions: string[] = [];
+  const params: any[] = [];
+  let idx = 1;
+
+  if (!isSuperAdmin) {
+    conditions.push(`me.restaurant_id = $${idx++}`);
+    params.push(restaurantId);
   }
 
-  if (canManageStore || branchId === null) {
-    // admin/storekeeper sees all branches in their restaurant
-    const result = await pool.query(
-      `SELECT
-         me.*,
-         et.name AS expense_type_name,
-         es.name AS subcategory_name,
-         b.name AS branch_name,
-         r.name AS restaurant_name,
-         u.name AS created_by_name
-       FROM misc_expenses me
-       JOIN expense_types et ON me.expense_type_id = et.id
-       LEFT JOIN expense_subcategories es ON me.subcategory_id = es.id
-       JOIN branches b ON me.branch_id = b.id
-       JOIN restaurants r ON me.restaurant_id = r.id
-       LEFT JOIN users u ON me.created_by = u.id
-       WHERE me.restaurant_id = $1
-       ORDER BY me.expense_date DESC, me.created_at DESC`,
-      [restaurantId],
-    );
-    return result.rows;
+  if (!isSuperAdmin && !canManageStore && branchId) {
+    conditions.push(`me.branch_id = $${idx++}`);
+    params.push(branchId);
   }
 
-  // branch level — see only their branch
+  if (filters.date) {
+    conditions.push(`me.expense_date = $${idx++}::date`);
+    params.push(filters.date);
+  }
+
+  const whereClause =
+    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const countResult = await pool.query(
+    `SELECT COUNT(*)
+     FROM misc_expenses me
+     JOIN expense_types et ON me.expense_type_id = et.id
+     LEFT JOIN expense_subcategories es ON me.subcategory_id = es.id
+     JOIN branches b ON me.branch_id = b.id
+     LEFT JOIN users u ON me.created_by = u.id
+     ${whereClause}`,
+    params,
+  );
+  const total = Number(countResult.rows[0].count);
+
+  const offset = (filters.page - 1) * filters.limit;
+
   const result = await pool.query(
     `SELECT
        me.*,
        et.name AS expense_type_name,
        es.name AS subcategory_name,
        b.name AS branch_name,
-       r.name AS restaurant_name,
        u.name AS created_by_name
      FROM misc_expenses me
      JOIN expense_types et ON me.expense_type_id = et.id
      LEFT JOIN expense_subcategories es ON me.subcategory_id = es.id
      JOIN branches b ON me.branch_id = b.id
-     JOIN restaurants r ON me.restaurant_id = r.id
      LEFT JOIN users u ON me.created_by = u.id
-     WHERE me.branch_id = $1
-     ORDER BY me.expense_date DESC, me.created_at DESC`,
-    [branchId],
+     ${whereClause}
+     ORDER BY me.expense_date DESC, me.created_at DESC
+     LIMIT $${idx++} OFFSET $${idx++}`,
+    [...params, filters.limit, offset],
   );
-  return result.rows;
+
+  return {
+    data: result.rows,
+    pagination: {
+      total,
+      page: filters.page,
+      limit: filters.limit,
+      totalPages: Math.ceil(total / filters.limit),
+    },
+  };
 };
 
 export const deleteMiscExpense = async (id: number) => {

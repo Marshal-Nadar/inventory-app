@@ -151,12 +151,14 @@ export const getPending = async (
 ): Promise<void> => {
   try {
     const { is_super_admin, restaurant_id } = req.user!;
-    const { vendor_id } = req.query;
+    const { vendor_id, page = "1", limit = "20" } = req.query;
 
     const data = await vendorPaymentService.getPendingPayments(
       is_super_admin,
       restaurant_id ?? 0,
       vendor_id ? Number(vendor_id) : undefined,
+      Number(page),
+      Number(limit),
     );
     res.json({ success: true, data });
   } catch (err) {

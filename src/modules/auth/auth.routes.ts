@@ -12,5 +12,11 @@ router.post(
   authorize("admin"),
   authController.impersonate,
 );
+router.post("/change-password", authenticate, authController.changePassword);
+router.post(
+  "/reset-password/:userId",
+  authenticate,
+  authController.resetPassword,
+);
 
 export default router;

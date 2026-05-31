@@ -9,13 +9,21 @@ export const getAll = async (
   try {
     const { is_super_admin, can_manage_store, restaurant_id, branch_id } =
       req.user!;
-    const data = await transferRequestService.getAllTransferRequests(
+    const { status, page = "1", limit = "20" } = req.query;
+
+    const result = await transferRequestService.getAllTransferRequests(
       is_super_admin,
       can_manage_store,
       restaurant_id ?? 0,
       branch_id ?? null,
+      {
+        status: status as string,
+        page: Number(page),
+        limit: Number(limit),
+      },
     );
-    res.json({ success: true, data });
+
+    res.json({ success: true, ...result });
   } catch (err) {
     next(err);
   }

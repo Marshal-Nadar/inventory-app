@@ -203,6 +203,8 @@ export const getPendingPayments = async (
   isSuperAdmin: boolean,
   restaurantId: number,
   vendorId?: number,
+  page: number = 1,
+  limit: number = 20,
 ) => {
   const conditions: string[] = [`p.total_cost > COALESCE(paid.amount_paid, 0)`];
   const params: any[] = [];
@@ -220,13 +222,28 @@ export const getPendingPayments = async (
 
   const whereClause = `WHERE ${conditions.join(" AND ")}`;
 
+  // count
+  const countResult = await pool.query(
+    `SELECT COUNT(*) FROM purchases p
+     JOIN vendors v ON p.vendor_id = v.id
+     LEFT JOIN (
+       SELECT purchase_id, SUM(amount) AS amount_paid
+       FROM vendor_payments GROUP BY purchase_id
+     ) paid ON paid.purchase_id = p.id
+     ${whereClause}`,
+    params,
+  );
+  const total = Number(countResult.rows[0].count);
+
+  const offset = (page - 1) * limit;
+
   const result = await pool.query(
     `SELECT
        v.name AS vendor_name,
        v.phone AS vendor_phone,
        p.id AS purchase_id,
        p.invoice_number,
-       p.purchase_date,
+       TO_CHAR(p.purchase_date, 'YYYY-MM-DD') AS purchase_date,
        p.total_cost AS purchase_amount,
        COALESCE(paid.amount_paid, 0) AS amount_paid,
        p.total_cost - COALESCE(paid.amount_paid, 0) AS amount_due
@@ -234,19 +251,27 @@ export const getPendingPayments = async (
      JOIN vendors v ON p.vendor_id = v.id
      LEFT JOIN (
        SELECT purchase_id, SUM(amount) AS amount_paid
-       FROM vendor_payments
-       GROUP BY purchase_id
+       FROM vendor_payments GROUP BY purchase_id
      ) paid ON paid.purchase_id = p.id
      ${whereClause}
-     ORDER BY p.purchase_date ASC`,
-    params,
+     ORDER BY p.purchase_date ASC
+     LIMIT $${idx++} OFFSET $${idx++}`,
+    [...params, limit, offset],
   );
 
-  const rows = result.rows;
-  const totalDue = rows.reduce(
+  const totalDue = result.rows.reduce(
     (sum: number, row: any) => sum + Number(row.amount_due),
     0,
   );
 
-  return { pending: rows, total_due: totalDue };
+  return {
+    pending: result.rows,
+    total_due: totalDue,
+    pagination: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
 };
