@@ -72,7 +72,8 @@ export const create = async (
 
     // date restriction — non-admin can only use today
     const isAdmin = role === "admin" || is_super_admin;
-    const today = new Date().toISOString().split("T")[0];
+
+    const today = new Date().toLocaleDateString("en-CA");
 
     if (!isAdmin && expense_date !== today) {
       res.status(400).json({

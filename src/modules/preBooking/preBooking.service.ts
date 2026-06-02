@@ -83,8 +83,20 @@ export const getAllPreBookings = async (
     [...params, filters.limit, offset],
   );
 
+  const orders = result.rows;
+  for (const order of orders) {
+    const items = await pool.query(
+      `SELECT product_name, quantity
+     FROM pre_booking_items
+     WHERE booking_id = $1
+     ORDER BY id`,
+      [order.id],
+    );
+    order.items = items.rows;
+  }
+
   return {
-    data: result.rows,
+    data: orders,
     pagination: {
       total,
       page: filters.page,

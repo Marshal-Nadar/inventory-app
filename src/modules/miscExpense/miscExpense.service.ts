@@ -114,6 +114,7 @@ export const getAllMiscExpenses = async (
   const result = await pool.query(
     `SELECT
        me.*,
+       me.expense_date::text AS expense_date,
        et.name AS expense_type_name,
        es.name AS subcategory_name,
        b.name AS branch_name,
