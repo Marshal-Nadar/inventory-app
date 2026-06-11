@@ -126,18 +126,36 @@ export const getDashboardStats = async (
     // vendor outstanding
     pool.query(
       `
-      SELECT COALESCE(SUM(
-        p.total_cost - COALESCE(paid.total_paid, 0)
-      ), 0) AS outstanding
-      FROM purchases p
-      LEFT JOIN (
-        SELECT purchase_id, SUM(amount) AS total_paid
-        FROM vendor_payments
-        GROUP BY purchase_id
-      ) paid ON paid.purchase_id = p.id
-      WHERE p.total_cost > COALESCE(paid.total_paid, 0)
-      ${!isSuperAdmin ? "AND p.restaurant_id = $1" : ""}
-    `,
+  SELECT
+    COALESCE(SUM(p.total_cost), 0) AS total_purchase_amount,
+
+    COALESCE(
+      SUM(COALESCE(paid.total_paid, 0)),
+      0
+    ) AS total_amount_paid,
+
+    COALESCE(
+      SUM(
+        CASE
+          WHEN p.total_cost > COALESCE(paid.total_paid, 0)
+          THEN p.total_cost - COALESCE(paid.total_paid, 0)
+          ELSE 0
+        END
+      ),
+      0
+    ) AS total_amount_due
+
+  FROM purchases p
+  LEFT JOIN (
+    SELECT
+      purchase_id,
+      SUM(amount) AS total_paid
+    FROM vendor_payments
+    GROUP BY purchase_id
+  ) paid ON paid.purchase_id = p.id
+
+  ${!isSuperAdmin ? "WHERE p.restaurant_id = $1" : ""}
+  `,
       !isSuperAdmin ? [restaurantId] : [],
     ),
 
@@ -313,6 +331,13 @@ export const getDashboardStats = async (
       total_net_counter: Number(cumulativeSales.rows[0].total_net_counter),
       total_cash: Number(cumulativeSales.rows[0].total_cash),
       total_upi: Number(cumulativeSales.rows[0].total_upi),
+    },
+    vendor_stats: {
+      total_purchase_amount: Number(
+        pendingVendorBalance.rows[0].total_purchase_amount,
+      ),
+      total_amount_paid: Number(pendingVendorBalance.rows[0].total_amount_paid),
+      total_amount_due: Number(pendingVendorBalance.rows[0].total_amount_due),
     },
   };
 };

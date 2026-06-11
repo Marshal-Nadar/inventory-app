@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from "express";
 import * as purchaseService from "./purchase.service";
 
-const PERMITTED_ROLES = ["admin", "manager", "supervisor"];
+const PERMITTED_ROLES = ["admin", "manager", "supervisor", "storekeeper"];
 
 const hasPermission = (role: string, isSuperAdmin: boolean): boolean => {
   if (isSuperAdmin) return true;

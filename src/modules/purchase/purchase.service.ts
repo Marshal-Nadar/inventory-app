@@ -57,7 +57,16 @@ export const getAllPurchases = async (
   const offset = (filters.page - 1) * filters.limit;
   const dataResult = await pool.query(
     `SELECT 
-     p.*,
+     p.id,
+     p.restaurant_id,
+     p.vendor_id,
+     p.invoice_number,
+     TO_CHAR(p.purchase_date, 'YYYY-MM-DD') AS purchase_date,
+     p.total_cost,
+     p.notes,
+     p.created_by,
+     p.created_at,
+     p.updated_at,
      v.name AS vendor_name,
      r.name AS restaurant_name,
      r.storage_room_name AS storage_room_name
@@ -183,16 +192,26 @@ export const getPurchaseReport = async (
 
 export const getPurchaseById = async (id: number) => {
   const purchase = await pool.query(
-    `SELECT p.*,
-            v.name AS vendor_name,
-            r.name AS restaurant_name,
-            r.storage_room_name,
-            u.name AS created_by_name
-     FROM purchases p
-     JOIN vendors v ON p.vendor_id = v.id
-     JOIN restaurants r ON p.restaurant_id = r.id
-     LEFT JOIN users u ON p.created_by = u.id
-     WHERE p.id = $1`,
+    `SELECT 
+     p.id,
+     p.restaurant_id,
+     p.vendor_id,
+     p.invoice_number,
+     TO_CHAR(p.purchase_date, 'YYYY-MM-DD') AS purchase_date,
+     p.total_cost,
+     p.notes,
+     p.created_by,
+     p.created_at,
+     p.updated_at,
+     v.name AS vendor_name,
+     r.name AS restaurant_name,
+     r.storage_room_name,
+     u.name AS created_by_name
+   FROM purchases p
+   JOIN vendors v ON p.vendor_id = v.id
+   JOIN restaurants r ON p.restaurant_id = r.id
+   LEFT JOIN users u ON p.created_by = u.id
+   WHERE p.id = $1`,
     [id],
   );
 
