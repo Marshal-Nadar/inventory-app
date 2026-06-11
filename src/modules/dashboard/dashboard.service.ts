@@ -19,6 +19,7 @@ export const getDashboardStats = async (
     pendingPreBookings,
     pendingVendorBalance,
     recentPurchases,
+    cumulativeSales,
   ] = await Promise.all([
     // restaurants
     pool.query(
@@ -157,6 +158,122 @@ export const getDashboardStats = async (
     `,
       !isSuperAdmin ? [restaurantId] : [],
     ),
+
+    // cumulative sales — all time for branch
+    // cumulative sales minus vendor payments
+    (() => {
+      if (isSuperAdmin) {
+        return pool.query(`
+      SELECT
+        COALESCE(SUM(ds.cash), 0)
+          - COALESCE((
+              SELECT SUM(vp.amount)
+              FROM vendor_payments vp
+              JOIN purchases p ON vp.purchase_id = p.id
+              WHERE vp.payment_mode = 'cash'
+            ), 0)
+          - COALESCE((
+              SELECT SUM(me.amount)
+              FROM misc_expenses me
+              JOIN users u ON me.created_by = u.id
+              JOIN roles r ON u.role_id = r.id
+              WHERE me.payment_method = 'cash'
+              AND r.can_manage_store = true
+            ), 0) AS total_cash,
+        COALESCE(SUM(ds.upi), 0)
+          - COALESCE((
+              SELECT SUM(vp.amount)
+              FROM vendor_payments vp
+              JOIN purchases p ON vp.purchase_id = p.id
+              WHERE vp.payment_mode IN ('upi','bank_transfer','cheque')
+            ), 0)
+          - COALESCE((
+              SELECT SUM(me.amount)
+              FROM misc_expenses me
+              JOIN users u ON me.created_by = u.id
+              JOIN roles r ON u.role_id = r.id
+              WHERE me.payment_method = 'upi'
+              AND r.can_manage_store = true
+            ), 0) AS total_upi,
+        COALESCE(SUM(ds.net_sales), 0) AS total_net_sales,
+        COALESCE(SUM(ds.net_counter), 0) AS total_net_counter
+      FROM daily_sales ds
+    `);
+      } else if (canManageStore) {
+        return pool.query(
+          `
+      SELECT
+        COALESCE(SUM(ds.cash), 0)
+          - COALESCE((
+              SELECT SUM(vp.amount)
+              FROM vendor_payments vp
+              JOIN purchases p ON vp.purchase_id = p.id
+              WHERE vp.payment_mode = 'cash'
+              AND p.restaurant_id = $1
+            ), 0)
+          - COALESCE((
+              SELECT SUM(me.amount)
+              FROM misc_expenses me
+              JOIN users u ON me.created_by = u.id
+              JOIN roles r ON u.role_id = r.id
+              WHERE me.payment_method = 'cash'
+              AND me.restaurant_id = $1
+              AND r.can_manage_store = true
+            ), 0) AS total_cash,
+        COALESCE(SUM(ds.upi), 0)
+          - COALESCE((
+              SELECT SUM(vp.amount)
+              FROM vendor_payments vp
+              JOIN purchases p ON vp.purchase_id = p.id
+              WHERE vp.payment_mode IN ('upi','bank_transfer','cheque')
+              AND p.restaurant_id = $1
+            ), 0)
+          - COALESCE((
+              SELECT SUM(me.amount)
+              FROM misc_expenses me
+              JOIN users u ON me.created_by = u.id
+              JOIN roles r ON u.role_id = r.id
+              WHERE me.payment_method = 'upi'
+              AND me.restaurant_id = $1
+              AND r.can_manage_store = true
+            ), 0) AS total_upi,
+        COALESCE(SUM(ds.net_sales), 0) AS total_net_sales,
+        COALESCE(SUM(ds.net_counter), 0) AS total_net_counter
+      FROM daily_sales ds
+      WHERE ds.restaurant_id = $1
+    `,
+          [restaurantId],
+        );
+      } else {
+        // branch manager — misc expenses already in daily_sales
+        return pool.query(
+          `
+      SELECT
+        COALESCE(SUM(ds.cash), 0)
+          - COALESCE((
+              SELECT SUM(vp.amount)
+              FROM vendor_payments vp
+              JOIN purchases p ON vp.purchase_id = p.id
+              WHERE vp.payment_mode = 'cash'
+              AND p.restaurant_id = $2
+            ), 0) AS total_cash,
+        COALESCE(SUM(ds.upi), 0)
+          - COALESCE((
+              SELECT SUM(vp.amount)
+              FROM vendor_payments vp
+              JOIN purchases p ON vp.purchase_id = p.id
+              WHERE vp.payment_mode IN ('upi','bank_transfer','cheque')
+              AND p.restaurant_id = $2
+            ), 0) AS total_upi,
+        COALESCE(SUM(ds.net_sales), 0) AS total_net_sales,
+        COALESCE(SUM(ds.net_counter), 0) AS total_net_counter
+      FROM daily_sales ds
+      WHERE ds.branch_id = $1
+    `,
+          [branchId, restaurantId],
+        );
+      }
+    })(),
   ]);
 
   return {
@@ -191,6 +308,12 @@ export const getDashboardStats = async (
       total_net_counter: Number(todaySales.rows[0].total_net_counter),
     },
     recent_purchases: recentPurchases.rows,
+    cumulative_sales: {
+      total_net_sales: Number(cumulativeSales.rows[0].total_net_sales),
+      total_net_counter: Number(cumulativeSales.rows[0].total_net_counter),
+      total_cash: Number(cumulativeSales.rows[0].total_cash),
+      total_upi: Number(cumulativeSales.rows[0].total_upi),
+    },
   };
 };
 
