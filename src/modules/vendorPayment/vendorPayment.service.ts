@@ -37,13 +37,13 @@ export const getVendorInvoices = async (
 
   const result = await pool.query(
     `SELECT
-       p.id AS purchase_id,
-       p.invoice_number,
-       p.purchase_date,
-       p.total_cost AS invoice_amount,
-       COALESCE(SUM(vp.amount), 0) AS amount_paid,
-       p.total_cost - COALESCE(SUM(vp.amount), 0) AS balance_due
-     FROM purchases p
+      p.id AS purchase_id,
+      p.invoice_number,
+      TO_CHAR(p.purchase_date, 'YYYY-MM-DD') AS purchase_date,
+      p.total_cost AS invoice_amount,
+      COALESCE(SUM(vp.amount), 0) AS amount_paid,
+      p.total_cost - COALESCE(SUM(vp.amount), 0) AS balance_due
+    FROM purchases p
      LEFT JOIN vendor_payments vp ON vp.purchase_id = p.id
      WHERE p.vendor_id = $1
        ${restaurantCondition}
@@ -170,18 +170,18 @@ export const getPaymentReceipts = async (
 
   const result = await pool.query(
     `SELECT
-       vp.id AS payment_id,
-       vp.payment_date,
-       vp.amount,
-       vp.payment_mode,
-       vp.notes,
-       v.name AS vendor_name,
-       v.phone AS vendor_phone,
-       p.invoice_number,
-       p.purchase_date,
-       p.total_cost AS invoice_amount,
-       u.name AS recorded_by
-     FROM vendor_payments vp
+      vp.id AS payment_id,
+      TO_CHAR(vp.payment_date, 'YYYY-MM-DD') AS payment_date,
+      vp.amount,
+      vp.payment_mode,
+      vp.notes,
+      v.name AS vendor_name,
+      v.phone AS vendor_phone,
+      p.invoice_number,
+      TO_CHAR(p.purchase_date, 'YYYY-MM-DD') AS purchase_date,
+      p.total_cost AS invoice_amount,
+      u.name AS recorded_by
+    FROM vendor_payments vp
      JOIN vendors v ON vp.vendor_id = v.id
      JOIN purchases p ON vp.purchase_id = p.id
      LEFT JOIN users u ON vp.created_by = u.id

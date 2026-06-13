@@ -113,20 +113,20 @@ export const getAllMiscExpenses = async (
 
   const result = await pool.query(
     `SELECT
-       me.*,
-       me.expense_date::text AS expense_date,
-       et.name AS expense_type_name,
-       es.name AS subcategory_name,
-       b.name AS branch_name,
-       u.name AS created_by_name
-     FROM misc_expenses me
-     JOIN expense_types et ON me.expense_type_id = et.id
-     LEFT JOIN expense_subcategories es ON me.subcategory_id = es.id
-     JOIN branches b ON me.branch_id = b.id
-     LEFT JOIN users u ON me.created_by = u.id
-     ${whereClause}
-     ORDER BY me.expense_date DESC, me.created_at DESC
-     LIMIT $${idx++} OFFSET $${idx++}`,
+     me.*,
+     TO_CHAR(me.expense_date, 'YYYY-MM-DD') AS expense_date,
+     et.name AS expense_type_name,
+     es.name AS subcategory_name,
+     b.name AS branch_name,
+     u.name AS created_by_name
+   FROM misc_expenses me
+   JOIN expense_types et ON me.expense_type_id = et.id
+   LEFT JOIN expense_subcategories es ON me.subcategory_id = es.id
+   JOIN branches b ON me.branch_id = b.id
+   LEFT JOIN users u ON me.created_by = u.id
+   ${whereClause}
+   ORDER BY me.expense_date DESC, me.created_at DESC
+   LIMIT $${idx++} OFFSET $${idx++}`,
     [...params, filters.limit, offset],
   );
 
@@ -185,20 +185,31 @@ export const getMiscExpenseReport = async (
 
   const result = await pool.query(
     `SELECT
-       me.*,
-       et.name AS expense_type_name,
-       es.name AS subcategory_name,
-       b.name AS branch_name,
-       r.name AS restaurant_name,
-       u.name AS created_by_name
-     FROM misc_expenses me
-     JOIN expense_types et ON me.expense_type_id = et.id
-     LEFT JOIN expense_subcategories es ON me.subcategory_id = es.id
-     JOIN branches b ON me.branch_id = b.id
-     JOIN restaurants r ON me.restaurant_id = r.id
-     LEFT JOIN users u ON me.created_by = u.id
-     ${whereClause}
-     ORDER BY me.expense_date DESC, me.created_at DESC`,
+     me.id,
+     me.restaurant_id,
+     me.branch_id,
+     me.expense_type_id,
+     me.subcategory_id,
+     me.amount,
+     me.payment_method,
+     TO_CHAR(me.expense_date, 'YYYY-MM-DD') AS expense_date,
+     me.notes,
+     me.created_by,
+     me.created_at,
+     me.updated_at,
+     et.name AS expense_type_name,
+     es.name AS subcategory_name,
+     b.name AS branch_name,
+     r.name AS restaurant_name,
+     u.name AS created_by_name
+   FROM misc_expenses me
+   JOIN expense_types et ON me.expense_type_id = et.id
+   LEFT JOIN expense_subcategories es ON me.subcategory_id = es.id
+   JOIN branches b ON me.branch_id = b.id
+   JOIN restaurants r ON me.restaurant_id = r.id
+   LEFT JOIN users u ON me.created_by = u.id
+   ${whereClause}
+   ORDER BY me.expense_date DESC, me.created_at DESC`,
     params,
   );
 
